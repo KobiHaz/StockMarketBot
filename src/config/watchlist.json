@@ -1,0 +1,21 @@
+{
+    "tickers": [
+        "LEUMI.TA",
+        "POLI.TA",
+        "DSCT.TA",
+        "FIBI.TA",
+        "ICL.TA",
+        "NICE.TA",
+        "TEVA.TA",
+        "BEZQ.TA",
+        "ELIT.TA",
+        "DEDF.TA",
+        "AZRG.TA",
+        "MRLN.TA",
+        "HRL.TA",
+        "DELKG.TA",
+        "ORL.TA"
+    ],
+    "lastUpdated": "2026-02-02",
+    "description": "Tel Aviv Stock Exchange (TASE) tickers for live market testing."
+}

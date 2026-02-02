@@ -1,0 +1,109 @@
+# Smart Volume Radar
+
+🚀 **Automated stock volume monitoring system** that identifies unusual trading activity and delivers daily intelligence reports via Telegram.
+
+## Features
+
+- 📊 **RVOL Analysis**: Calculates Relative Volume (today's volume / 20-day average)
+- 🎯 **Signal Detection**: Identifies stocks with RVOL ≥ 2.0
+- 🔕 **Silent Accumulation**: Flags high-volume stocks with minimal price movement
+- 📰 **News Enrichment**: Attaches recent headlines from Finnhub
+- 📱 **Telegram Delivery**: Sends formatted reports to your phone
+- ⏰ **Automated Scheduling**: Runs daily via GitHub Actions
+
+## Quick Start
+
+### 1. Clone and Install
+
+```bash
+cd smart-volume-radar
+npm install
+```
+
+### 2. Configure Environment
+
+Copy `.env.example` to `.env` and fill in your credentials:
+
+```bash
+cp .env.example .env
+```
+
+Required secrets:
+- `FINNHUB_API_KEY` - Get from [finnhub.io](https://finnhub.io/)
+- `TELEGRAM_BOT_TOKEN` - Create via [@BotFather](https://t.me/botfather)
+- `TELEGRAM_CHAT_ID` - Your personal chat ID
+
+### 3. Run Locally
+
+```bash
+npm run start
+```
+
+### 4. Deploy to GitHub Actions
+
+1. Push to GitHub
+2. Add secrets in repo Settings → Secrets → Actions
+3. Enable the workflow
+
+## Watchlist
+
+Edit `src/config/watchlist.json` to customize your ticker list:
+
+```json
+{
+  "tickers": ["AAPL", "MSFT", "GOOGL", ...],
+  "lastUpdated": "2026-02-01"
+}
+```
+
+## Configuration
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MIN_RVOL` | 2.0 | Minimum RVOL to trigger signal |
+| `TOP_N` | 15 | Max signals to include in report |
+| `PRICE_CHANGE_THRESHOLD` | 2 | % threshold for "volume w/o price" |
+
+## Sample Output
+
+```
+📊 Smart Volume Radar
+📅 2026-02-01 | 12 Signals Found
+━━━━━━━━━━━━━━━━━━━━━━
+
+🟢 NVDA +8.42%
+📈 RVOL: 4.82x
+📰 News:
+   • NVIDIA Reports Record Q4 Revenue...
+
+🔴 AMD -3.21%
+📈 RVOL: 3.15x
+📰 News:
+   • AMD Faces Supply Chain Challenges...
+
+━━━━━━━━━━━━━━━━━━━━━━
+🔕 Volume w/o Price (Silent Activity)
+MSFT (2.1x), ORCL (2.3x)
+```
+
+## Project Structure
+
+```
+smart-volume-radar/
+├── src/
+│   ├── index.ts           # Main entry
+│   ├── config/            # Configuration & watchlist
+│   ├── services/          # Core business logic
+│   │   ├── marketData.ts  # Yahoo Finance integration
+│   │   ├── rvolCalculator.ts
+│   │   ├── newsService.ts # Finnhub integration
+│   │   └── telegramBot.ts # Telegram messaging
+│   ├── types/             # TypeScript interfaces
+│   └── utils/             # Helpers & error handling
+├── tests/                 # Unit tests
+└── .github/workflows/     # GitHub Actions
+```
+
+## License
+
+MIT
