@@ -13,7 +13,7 @@ import logger from '../utils/logger.js';
  * Suppress Yahoo Finance validation warnings
  */
 yahooFinance.setGlobalConfig({
-    validation: { logErrors: false }
+    validation: { logErrors: false },
 });
 
 /**
@@ -77,35 +77,48 @@ async function fetchStockDataWithRetry(ticker: string): Promise<StockData | null
 }
 
 /**
- * Fetch stock data for all tickers sequentially with delays
+ * Fetch stock data for all tickers using a single batch request
+ * This is much more efficient and less likely to trigger rate limits than sequential calls
  * @param tickers - Array of ticker symbols
  * @returns Array of StockData (excludes failed fetches)
  */
 export async function fetchAllStocks(tickers: string[]): Promise<StockData[]> {
-    const results: StockData[] = [];
-    const { batchDelayMs } = config;
+    logger.info(`🚀 Starting batch fetch for ${tickers.length} tickers...`);
 
-    logger.info(`Starting sequential fetch for ${tickers.length} tickers...`);
+    return withRetry(
+        async () => {
+            // yahooFinance.quote can take an array of symbols
+            const quotes = await yahooFinance.quote(tickers);
 
-    for (let i = 0; i < tickers.length; i++) {
-        const ticker = tickers[i];
-        const progress = `${i + 1}/${tickers.length}`;
+            // quotes is either a single Quote (if 1 ticker) or an array of Quotes
+            const quoteArray = Array.isArray(quotes) ? quotes : [quotes];
 
-        logger.info(`[${progress}] Fetching ${ticker}...`);
+            const results: StockData[] = quoteArray
+                .map(quote => {
+                    const currentVolume = quote.regularMarketVolume || 0;
+                    const avgVolume = quote.averageDailyVolume3Month || 0;
 
-        const result = await fetchStockDataWithRetry(ticker);
-        if (result) {
-            results.push(result);
-        }
+                    if (avgVolume === 0) return null;
 
-        // Delay between EVERY ticker to respect Yahoo rate limits
-        // Use batchDelayMs as the baseline (e.g., 1s or 2s)
-        if (i < tickers.length - 1) {
-            const jitter = Math.random() * 500; // Add 0-500ms jitter
-            await sleep(batchDelayMs + jitter);
-        }
-    }
+                    return {
+                        ticker: quote.symbol,
+                        currentVolume,
+                        avgVolume,
+                        rvol: currentVolume / avgVolume,
+                        priceChange: quote.regularMarketChangePercent || 0,
+                        lastPrice: quote.regularMarketPrice || 0,
+                    } as StockData;
+                })
+                .filter((s): s is StockData => s !== null);
 
-    logger.info(`Fetched data for ${results.length}/${tickers.length} tickers successfully`);
-    return results;
+            logger.info(`✅ Successfully fetched ${results.length}/${tickers.length} symbols in one batch`);
+            return results;
+        },
+        config.maxRetries,
+        config.retryDelayMs * 2,
+        'Batch quote fetch'
+    ).catch((error) => {
+        logger.error('❌ Batch fetch failed completely after retries:', error.message);
+        return [];
+    });
 }
