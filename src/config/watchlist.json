@@ -1,21 +1,21 @@
 {
     "tickers": [
-        "LUMI.TA",
-        "POLI.TA",
-        "DSCT.TA",
-        "FIBI.TA",
-        "ICL.TA",
-        "NICE.TA",
-        "TEVA.TA",
-        "BEZQ.TA",
-        "ELIT.TA",
-        "DEDF.TA",
-        "AZRG.TA",
-        "MRLN.TA",
-        "HRL.TA",
-        "DELKG.TA",
-        "ORL.TA"
+        "AAPL",
+        "MSFT",
+        "GOOGL",
+        "AMZN",
+        "TSLA",
+        "META",
+        "NVDA",
+        "JPM",
+        "V",
+        "JNJ",
+        "WMT",
+        "PG",
+        "MA",
+        "UNH",
+        "HD"
     ],
     "lastUpdated": "2026-02-02",
-    "description": "Tel Aviv Stock Exchange (TASE) tickers for live market testing."
+    "description": "US Large Cap stocks for platform testing - will switch back to Tel Aviv once confirmed working."
 }
