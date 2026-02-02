@@ -52,7 +52,14 @@ async function fetchStockData(ticker: string): Promise<StockData | null> {
             lastPrice: quote.regularMarketPrice || 0,
         };
     } catch (error) {
-        logger.error(`Failed to fetch data for ${ticker}`, error);
+        const err = error as any;
+        if (err.message?.includes('Too Many Requests') || err.response?.status === 429) {
+            logger.error(`❌ Yahoo Finance RATE LIMIT (429) for ${ticker}. The IP is blocked.`);
+        } else if (err.message?.includes('Not Found') || err.response?.status === 404) {
+            logger.error(`❌ Ticker NOT FOUND: ${ticker}. Check the symbol on finance.yahoo.com`);
+        } else {
+            logger.error(`❌ Error fetching ${ticker}:`, err.message || err);
+        }
         return null;
     }
 }
