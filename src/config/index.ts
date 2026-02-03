@@ -32,8 +32,8 @@ export const config = {
 
     // Rate limiting
     batchSize: 10,
-    batchDelayMs: 5000, // 5 seconds between tickers to avoid 429s
-    newsDelayMs: 1000,
+    batchDelayMs: 500, // 500ms between tickers - Chart API is less restrictive
+    newsDelayMs: 500,
 
     // Retry settings
     maxRetries: 3,
