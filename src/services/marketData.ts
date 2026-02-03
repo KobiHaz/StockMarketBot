@@ -1,173 +1,146 @@
 /**
  * Smart Volume Radar - Market Data Service
- * Fetches stock data with Yahoo Finance as primary and Alpha Vantage as fallback
+ * Uses direct HTTP requests to avoid library-specific rate limiting issues
  */
 
-import yahooFinance from 'yahoo-finance2';
 import { StockData } from '../types/index.js';
 import { config } from '../config/index.js';
-import { withRetry, sleep } from '../utils/errorHandler.js';
+import { sleep } from '../utils/errorHandler.js';
 import logger from '../utils/logger.js';
 
 /**
- * Suppress Yahoo Finance validation warnings
+ * Direct fetch from Yahoo Finance chart API
+ * This endpoint is sometimes less restricted than the quote API
  */
-yahooFinance.setGlobalConfig({
-    validation: { logErrors: false },
-});
-
-/**
- * Fetch stock data from Alpha Vantage API (fallback provider)
- * Alpha Vantage provides volume data which is essential for RVOL calculation
- */
-async function fetchFromAlphaVantage(ticker: string): Promise<StockData | null> {
-    const apiKey = process.env.ALPHA_VANTAGE_API_KEY;
-    if (!apiKey) {
-        return null;
-    }
-
+async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
     try {
-        // Convert Tel Aviv suffix if needed (LUMI.TA -> LUMI.TAE for Alpha Vantage)
-        const avTicker = ticker.replace('.TA', '.TLV');
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1mo`;
 
-        const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${avTicker}&apikey=${apiKey}`;
-        const response = await fetch(url);
-        const data = await response.json() as Record<string, any>;
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+            },
+        });
 
-        if (data['Global Quote'] && data['Global Quote']['05. price']) {
-            const quote = data['Global Quote'] as Record<string, string>;
-            const currentVolume = parseFloat(quote['06. volume']) || 0;
-            const lastPrice = parseFloat(quote['05. price']) || 0;
-            const priceChange = parseFloat(quote['10. change percent']?.replace('%', '')) || 0;
-
-            // Alpha Vantage doesn't provide avg volume, so we'll estimate from current
-            // This is a limitation - for proper RVOL we need historical data
-            return {
-                ticker,
-                currentVolume,
-                avgVolume: currentVolume, // Placeholder - will show RVOL of 1.0
-                rvol: 1.0,
-                priceChange,
-                lastPrice,
-            };
-        }
-        return null;
-    } catch (error) {
-        logger.warn(`Alpha Vantage fetch failed for ${ticker}:`, error);
-        return null;
-    }
-}
-
-/**
- * Fetch data for a single ticker using Yahoo Finance
- */
-async function fetchFromYahoo(ticker: string): Promise<StockData | null> {
-    try {
-        const quote = await yahooFinance.quote(ticker);
-
-        if (!quote) {
+        if (!response.ok) {
+            if (response.status === 429) {
+                logger.warn(`⚠️ Yahoo Chart API rate limited for ${ticker}`);
+            }
             return null;
         }
 
-        const currentVolume = quote.regularMarketVolume || 0;
-        const avgVolume = quote.averageDailyVolume3Month || 0;
-        const priceChange = quote.regularMarketChangePercent || 0;
+        const data = await response.json() as any;
+        const result = data?.chart?.result?.[0];
 
-        if (avgVolume === 0) {
+        if (!result) {
+            logger.warn(`No chart data for ${ticker}`);
             return null;
         }
+
+        const meta = result.meta;
+        const indicators = result.indicators?.quote?.[0];
+
+        if (!indicators?.volume || indicators.volume.length === 0) {
+            return null;
+        }
+
+        // Get volumes (filter out nulls)
+        const volumes = indicators.volume.filter((v: number | null) => v !== null && v > 0);
+        if (volumes.length < 5) return null;
+
+        // Current volume is the last entry
+        const currentVolume = volumes[volumes.length - 1] || 0;
+
+        // Average volume from previous days (exclude today)
+        const historicalVolumes = volumes.slice(0, -1);
+        const avgVolume = historicalVolumes.reduce((a: number, b: number) => a + b, 0) / historicalVolumes.length;
+
+        if (avgVolume === 0) return null;
+
+        const rvol = currentVolume / avgVolume;
+        const priceChange = meta.regularMarketChangePercent || 0;
 
         return {
             ticker,
             currentVolume,
             avgVolume,
-            rvol: currentVolume / avgVolume,
+            rvol,
             priceChange,
-            lastPrice: quote.regularMarketPrice || 0,
+            lastPrice: meta.regularMarketPrice || 0,
         };
     } catch (error) {
-        const err = error as any;
-        if (err.message?.includes('Too Many Requests') || err.message?.includes('429')) {
-            logger.warn(`Yahoo rate-limited for ${ticker}, trying fallback...`);
-        }
+        logger.error(`❌ Chart fetch failed for ${ticker}:`, (error as Error).message);
         return null;
     }
 }
 
 /**
- * Fetch stock data with fallback strategy
+ * Fetch from Twelve Data API (reliable free tier)
  */
-async function fetchStockDataWithFallback(ticker: string): Promise<StockData | null> {
-    // Try Yahoo first
-    let result = await fetchFromYahoo(ticker);
-    if (result) return result;
+async function fetchFromTwelveData(ticker: string): Promise<StockData | null> {
+    const apiKey = process.env.TWELVE_DATA_API_KEY;
+    if (!apiKey) return null;
 
-    // Try Alpha Vantage as fallback
-    result = await fetchFromAlphaVantage(ticker);
-    if (result) {
-        logger.info(`✅ Got ${ticker} from Alpha Vantage fallback`);
-        return result;
+    try {
+        const url = `https://api.twelvedata.com/quote?symbol=${ticker}&apikey=${apiKey}`;
+        const response = await fetch(url);
+        const data = await response.json() as any;
+
+        if (data.status === 'error' || !data.close) {
+            return null;
+        }
+
+        return {
+            ticker,
+            currentVolume: parseFloat(data.volume) || 0,
+            avgVolume: parseFloat(data.average_volume) || parseFloat(data.volume) || 1,
+            rvol: parseFloat(data.volume) / (parseFloat(data.average_volume) || 1),
+            priceChange: parseFloat(data.percent_change) || 0,
+            lastPrice: parseFloat(data.close) || 0,
+        };
+    } catch (error) {
+        return null;
     }
-
-    return null;
 }
 
 /**
- * Fetch stock data for all tickers
- * Uses batch request for Yahoo, falls back to sequential with Alpha Vantage
+ * Fetch all stocks with multiple fallback strategies
  */
 export async function fetchAllStocks(tickers: string[]): Promise<StockData[]> {
     logger.info(`🚀 Starting fetch for ${tickers.length} tickers...`);
 
-    // First, try Yahoo Finance batch request
-    try {
-        const quotes = await yahooFinance.quote(tickers);
-        const quoteArray = Array.isArray(quotes) ? quotes : [quotes];
-
-        const results: StockData[] = quoteArray
-            .filter(quote => quote && quote.symbol)
-            .map(quote => {
-                const currentVolume = quote.regularMarketVolume || 0;
-                const avgVolume = quote.averageDailyVolume3Month || 0;
-
-                if (avgVolume === 0) return null;
-
-                return {
-                    ticker: quote.symbol,
-                    currentVolume,
-                    avgVolume,
-                    rvol: currentVolume / avgVolume,
-                    priceChange: quote.regularMarketChangePercent || 0,
-                    lastPrice: quote.regularMarketPrice || 0,
-                } as StockData;
-            })
-            .filter((s): s is StockData => s !== null);
-
-        if (results.length > 0) {
-            logger.info(`✅ Yahoo Finance returned ${results.length}/${tickers.length} stocks`);
-            return results;
-        }
-    } catch (error) {
-        logger.warn('⚠️ Yahoo Finance batch failed, trying sequential with fallback...');
-    }
-
-    // Fallback: Sequential fetch with Alpha Vantage backup
     const results: StockData[] = [];
+    let successSource = 'unknown';
+
     for (let i = 0; i < tickers.length; i++) {
         const ticker = tickers[i];
         logger.info(`[${i + 1}/${tickers.length}] Fetching ${ticker}...`);
 
-        const result = await fetchStockDataWithFallback(ticker);
+        // Try Yahoo Chart API first
+        let result = await fetchFromYahooChart(ticker);
         if (result) {
+            successSource = 'Yahoo Chart';
             results.push(result);
+            logger.info(`✅ ${ticker}: RVOL=${result.rvol.toFixed(2)}x (${successSource})`);
+        } else {
+            // Try Twelve Data as fallback
+            result = await fetchFromTwelveData(ticker);
+            if (result) {
+                successSource = 'Twelve Data';
+                results.push(result);
+                logger.info(`✅ ${ticker}: RVOL=${result.rvol.toFixed(2)}x (${successSource})`);
+            } else {
+                logger.warn(`❌ ${ticker}: No data from any source`);
+            }
         }
 
-        // Rate limit delay
+        // Rate limiting delay between requests
         if (i < tickers.length - 1) {
-            await sleep(1500);
+            await sleep(config.batchDelayMs);
         }
     }
 
-    logger.info(`📊 Final result: ${results.length}/${tickers.length} stocks fetched`);
+    logger.info(`📊 Final: ${results.length}/${tickers.length} stocks fetched successfully`);
     return results;
 }
