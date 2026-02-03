@@ -45,9 +45,11 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
             return null;
         }
 
-        // Get volumes (filter out nulls)
+        // Get volumes and closes (filter out nulls)
         const volumes = indicators.volume.filter((v: number | null) => v !== null && v > 0);
-        if (volumes.length < 5) return null;
+        const closes = indicators.close?.filter((c: number | null) => c !== null && c > 0) || [];
+
+        if (volumes.length < 5 || closes.length < 2) return null;
 
         // Current volume is the last entry
         const currentVolume = volumes[volumes.length - 1] || 0;
@@ -59,7 +61,11 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
         if (avgVolume === 0) return null;
 
         const rvol = currentVolume / avgVolume;
-        const priceChange = meta.regularMarketChangePercent || 0;
+
+        // Calculate price change from close prices
+        const currentClose = closes[closes.length - 1];
+        const previousClose = closes[closes.length - 2];
+        const priceChange = previousClose > 0 ? ((currentClose - previousClose) / previousClose) * 100 : 0;
 
         return {
             ticker,
@@ -67,7 +73,7 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
             avgVolume,
             rvol,
             priceChange,
-            lastPrice: meta.regularMarketPrice || 0,
+            lastPrice: meta.regularMarketPrice || currentClose || 0,
         };
     } catch (error) {
         logger.error(`❌ Chart fetch failed for ${ticker}:`, (error as Error).message);
