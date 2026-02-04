@@ -13,6 +13,10 @@ export interface StockData {
     rvol: number;
     priceChange: number;
     lastPrice: number;
+    sma50?: number;
+    sma200?: number;
+    rsi?: number;
+    sector?: string;
 }
 
 /**

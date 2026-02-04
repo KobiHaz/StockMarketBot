@@ -3,7 +3,7 @@
  * Graceful error handling with retry logic
  */
 
-import logger from './logger';
+import logger from './logger.js';
 
 /**
  * Sleep for a specified duration

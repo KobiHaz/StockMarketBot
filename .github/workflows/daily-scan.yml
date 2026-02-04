@@ -2,7 +2,10 @@ name: Smart Volume Radar - Daily Scan
 
 on:
   schedule:
-    # Run at 21:30 UTC (4:30 PM EST, 30 min after market close)
+    # Run at 4:30 PM EST / 5:30 PM EDT (ensures market is closed in both timezones)
+    # UTC conversion: 16:30 EST = 21:30 UTC, 17:30 EDT = 21:30 UTC
+    # Market closes at 4:00 PM ET (21:00 UTC EST, 20:00 UTC EDT)
+    # Using 21:30 UTC ensures market is closed in both EST and EDT periods
     # Only Monday to Friday
     - cron: '30 21 * * 1-5'
   

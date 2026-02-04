@@ -9,38 +9,34 @@ describe('RVOL Calculator', () => {
     const mockStocks: StockData[] = [
         {
             ticker: 'AAPL',
-            currentPrice: 180.5,
-            previousClose: 171.5,
-            priceChangePercent: 5.25,
-            todayVolume: 100000000,
-            avgVolume20D: 28571428,
+            lastPrice: 180.5,
+            priceChange: 5.25,
+            currentVolume: 100000000,
+            avgVolume: 28571428,
             rvol: 3.5,
         },
         {
             ticker: 'MSFT',
-            currentPrice: 405.2,
-            previousClose: 404.0,
-            priceChangePercent: 0.3,
-            todayVolume: 50000000,
-            avgVolume20D: 23809523,
+            lastPrice: 405.2,
+            priceChange: 0.3,
+            currentVolume: 50000000,
+            avgVolume: 23809523,
             rvol: 2.1,
         },
         {
             ticker: 'GOOGL',
-            currentPrice: 145.0,
-            previousClose: 148.1,
-            priceChangePercent: -2.1,
-            todayVolume: 30000000,
-            avgVolume20D: 20000000,
+            lastPrice: 145.0,
+            priceChange: -2.1,
+            currentVolume: 30000000,
+            avgVolume: 20000000,
             rvol: 1.5,
         },
         {
             ticker: 'NVDA',
-            currentPrice: 850.0,
-            previousClose: 800.0,
-            priceChangePercent: 6.25,
-            todayVolume: 80000000,
-            avgVolume20D: 16000000,
+            lastPrice: 850.0,
+            priceChange: 6.25,
+            currentVolume: 80000000,
+            avgVolume: 16000000,
             rvol: 5.0,
         },
     ];
@@ -137,7 +133,7 @@ describe('RVOL Calculator', () => {
         });
 
         it('should return true for zero change', () => {
-            const flatStock = { ...mockStocks[0], priceChangePercent: 0 };
+            const flatStock = { ...mockStocks[0], priceChange: 0 };
             expect(isBullish(flatStock)).toBe(true);
         });
     });

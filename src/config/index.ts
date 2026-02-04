@@ -41,40 +41,52 @@ export const config = {
 } as const;
 
 /**
- * Watchlist JSON structure
+ * Tickers JSON structure
  */
-interface WatchlistFile {
-    tickers: string[];
-    lastUpdated: string;
+interface TickerConfig {
+    symbol: string;
+    sector: string;
     description?: string;
 }
 
+interface TickersFile {
+    tickers: TickerConfig[];
+    lastUpdated: string;
+}
+
+// Internal cache for ticker data
+let tickerCache: TickerConfig[] | null = null;
+
+function getTickers(): TickerConfig[] {
+    if (tickerCache) return tickerCache;
+
+    const tickersPath = path.join(__dirname, 'tickers.json');
+    if (!fs.existsSync(tickersPath)) {
+        throw new Error(`Tickers config not found at ${tickersPath}`);
+    }
+
+    const rawData = fs.readFileSync(tickersPath, 'utf-8');
+    const data: TickersFile = JSON.parse(rawData);
+    tickerCache = data.tickers;
+    return tickerCache;
+}
+
 /**
- * Load tickers from watchlist.json
+ * Load tickers for scanning
  * @returns Array of ticker symbols
  */
 export function loadWatchlist(): string[] {
-    const watchlistPath = path.join(__dirname, 'watchlist.json');
+    const tickers = getTickers();
+    return tickers.map(t => t.symbol.toUpperCase());
+}
 
-    if (!fs.existsSync(watchlistPath)) {
-        throw new Error(`Watchlist not found at ${watchlistPath}`);
-    }
-
-    const rawData = fs.readFileSync(watchlistPath, 'utf-8');
-    const watchlist: WatchlistFile = JSON.parse(rawData);
-
-    // Validate tickers
-    if (!Array.isArray(watchlist.tickers) || watchlist.tickers.length === 0) {
-        throw new Error('Watchlist must contain at least one ticker');
-    }
-
-    // Normalize tickers (uppercase, trim)
-    const tickers = watchlist.tickers
-        .map((t) => t.trim().toUpperCase())
-        .filter((t) => t.length > 0);
-
-    console.log(`📋 Loaded ${tickers.length} tickers (updated: ${watchlist.lastUpdated})`);
-    return tickers;
+/**
+ * Get sector for a ticker
+ */
+export function getSectorForTicker(symbol: string): string {
+    const tickers = getTickers();
+    const ticker = tickers.find(t => t.symbol.toUpperCase() === symbol.toUpperCase());
+    return ticker?.sector || 'Other';
 }
 
 /**

@@ -3,7 +3,7 @@
  * Orchestrates the daily stock volume scan and reporting
  */
 
-import { loadWatchlist, validateConfig, config } from './config/index.js';
+import { loadWatchlist, validateConfig, config, getSectorForTicker } from './config/index.js';
 import { fetchAllStocks } from './services/marketData.js';
 import { calculateRVOL } from './services/rvolCalculator.js';
 import { enrichWithNews } from './services/newsService.js';
@@ -11,30 +11,50 @@ import { sendDailyReport, sendTelegramMessage } from './services/telegramBot.js'
 import { RVOLResult, MarketStatus } from './types/index.js';
 import logger from './utils/logger.js';
 import { formatErrorForTelegram } from './utils/errorHandler.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 /**
  * Check if US market is open/closed for the day
- * Returns true if we should run the scan (after market close on a weekday)
+ * Returns true if we should run the scan
  */
 function checkMarketStatus(): MarketStatus {
     const now = new Date();
-    const dayOfWeek = now.getUTCDay(); // 0 = Sunday, 6 = Saturday
+    // Get time in New York (EST/EDT)
+    const nyTime = new Intl.DateTimeFormat('en-US', {
+        timeZone: 'America/New_York',
+        hour: 'numeric',
+        hour12: false,
+        weekday: 'long',
+    }).formatToParts(now);
 
-    // Skip weekends
-    if (dayOfWeek === 0 || dayOfWeek === 6) {
+    const weekday = nyTime.find(p => p.type === 'weekday')?.value;
+    const hour = parseInt(nyTime.find(p => p.type === 'hour')?.value || '0', 10);
+
+    // Skip weekends (Saturday, Sunday)
+    if (weekday === 'Saturday' || weekday === 'Sunday') {
         return {
             isOpen: false,
             exchange: 'NYSE/NASDAQ',
             currentTime: now,
-            message: 'Market closed (weekend)',
+            message: `Market closed (it is ${weekday} in NY)`,
         };
     }
 
-    // For standard runs, we expect to run after 4 PM EST (21:00 UTC)
-    // This is just a warning, not a blocker
-    const utcHour = now.getUTCHours();
-    if (utcHour < 21) {
-        logger.warn('Running before market close (21:00 UTC). Data may be incomplete.');
+    // US markets close at 16:00 (4 PM) EST. 
+    // We ideally run after close for final daily volume.
+    if (hour < 16) {
+        const msg = `Market is still open (it is ${hour}:00 in NY). Data will be intraday.`;
+        logger.warn(msg);
+        return {
+            isOpen: true,
+            exchange: 'NYSE/NASDAQ',
+            currentTime: now,
+            message: msg
+        };
     }
 
     return {
@@ -98,11 +118,14 @@ async function main(): Promise<void> {
         logger.info('📰 Enriching with news...');
         const enrichedSignals = await enrichWithNews(topSignals);
 
-        // Mark volume without price stocks
-        const finalSignals: RVOLResult[] = enrichedSignals.map((s) => ({
-            ...s,
-            isVolumeWithoutPrice: volumeWithoutPrice.some((v) => v.ticker === s.ticker),
-        }));
+        // Mark volume without price stocks and add sector
+        const finalSignals: RVOLResult[] = enrichedSignals.map((s) => {
+            return {
+                ...s,
+                sector: getSectorForTicker(s.ticker),
+                isVolumeWithoutPrice: volumeWithoutPrice.some((v) => v.ticker === s.ticker),
+            };
+        });
 
         // 7. Send report
         const today = new Date().toISOString().split('T')[0];

@@ -7,6 +7,13 @@ import { NewsItem, FinnhubNewsResponse } from '../types/index.js';
 import { config } from '../config/index.js';
 import { sleep } from '../utils/errorHandler.js';
 import logger from '../utils/logger.js';
+import { XMLParser } from 'fast-xml-parser';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const xmlParser = new XMLParser();
 
 /**
  * Format date for Finnhub API (YYYY-MM-DD)
@@ -25,6 +32,11 @@ export async function fetchNewsForStock(ticker: string): Promise<NewsItem[]> {
 
     if (!finnhubApiKey) {
         logger.warn(`Skipping news fetch for ${ticker}: No Finnhub API key`);
+        return [];
+    }
+
+    if (ticker.endsWith('.TA')) {
+        // TASE stocks are not supported by Finnhub free tier or return 403
         return [];
     }
 
@@ -62,34 +74,82 @@ export async function fetchNewsForStock(ticker: string): Promise<NewsItem[]> {
 }
 
 /**
+ * Fetch news from Google News RSS for Israeli stocks
+ */
+export async function fetchHebrewNews(ticker: string): Promise<NewsItem[]> {
+    const namesPath = path.join(__dirname, '..', 'config', 'israeliNames.json');
+    const israeliNames = JSON.parse(fs.readFileSync(namesPath, 'utf-8'));
+
+    const name = (israeliNames as Record<string, string>)[ticker] || ticker.replace('.TA', '');
+    const query = encodeURIComponent(`${name} מניה`);
+    const url = `https://news.google.com/rss/search?q=${query}&hl=iw&gl=IL&ceid=IL:iw`;
+
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return [];
+
+        const xmlData = await response.text();
+        const jsonObj = xmlParser.parse(xmlData);
+        const items = jsonObj?.rss?.channel?.item;
+
+        if (!items) return [];
+
+        // Normalize to array
+        const newsItems = Array.isArray(items) ? items : [items];
+
+        return newsItems.slice(0, 3).map((item: any) => ({
+            headline: item.title,
+            url: item.link,
+            source: item.source?.['#text'] || 'Google News',
+            publishedAt: new Date(item.pubDate),
+        }));
+    } catch (error) {
+        logger.error(`Failed to fetch Hebrew news for ${ticker}`, error);
+        return [];
+    }
+}
+
+import pLimit from 'p-limit';
+
+/**
  * Enrich stocks with news data
- * @param stocks - Array of stock data to enrich
- * @returns Stocks with news attached
  */
 export async function enrichWithNews<T extends { ticker: string }>(
     stocks: T[]
 ): Promise<(T & { news: NewsItem[]; isVolumeWithoutPrice: boolean })[]> {
-    const results: (T & { news: NewsItem[]; isVolumeWithoutPrice: boolean })[] = [];
+    logger.info(`Enriching ${stocks.length} stocks with news using concurrency...`);
+
+    // Finnhub free tier is 60 calls/min. We use a concurrency of 2 
+    // to speed up but still leave room for the newsDelayMs if needed.
+    const limit = pLimit(2);
     const { newsDelayMs } = config;
 
-    logger.info(`Enriching ${stocks.length} stocks with news...`);
+    const tasks = stocks.map((stock, i) => limit(async () => {
+        let news: NewsItem[] = [];
 
-    for (let i = 0; i < stocks.length; i++) {
-        const stock = stocks[i];
-        const news = await fetchNewsForStock(stock.ticker);
+        try {
+            if (stock.ticker.endsWith('.TA')) {
+                news = await fetchHebrewNews(stock.ticker);
+            } else {
+                news = await fetchNewsForStock(stock.ticker);
+            }
+        } catch (error) {
+            logger.error(`Error fetching news for ${stock.ticker}`, error);
+        }
 
-        results.push({
+        // Add a small delay for Finnhub's minute-based rate limit if we have many stocks
+        if (stocks.length > 30) {
+            await sleep(newsDelayMs || 1000);
+        }
+
+        return {
             ...stock,
             news,
-            // This will be overwritten by caller if needed
-            isVolumeWithoutPrice: false,
-        });
+            isVolumeWithoutPrice: false, // Default, overwritten by caller
+        };
+    }));
 
-        // Rate limit: respect Finnhub's 60 calls/min limit
-        if (i < stocks.length - 1) {
-            await sleep(newsDelayMs);
-        }
-    }
+    const results = await Promise.all(tasks);
 
     const totalNews = results.reduce((sum, s) => sum + s.news.length, 0);
     logger.info(`Fetched ${totalNews} news articles total`);

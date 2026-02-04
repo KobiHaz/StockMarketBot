@@ -7,6 +7,7 @@ import { StockData } from '../types/index.js';
 import { config } from '../config/index.js';
 import { sleep } from '../utils/errorHandler.js';
 import logger from '../utils/logger.js';
+import { calculateSMA, calculateRSI } from '../utils/technicalAnalysis.js';
 
 /**
  * Direct fetch from Yahoo Finance chart API
@@ -14,7 +15,7 @@ import logger from '../utils/logger.js';
  */
 async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
     try {
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1mo`;
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
 
         const response = await fetch(url, {
             headers: {
@@ -67,6 +68,11 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
         const previousClose = closes[closes.length - 2];
         const priceChange = previousClose > 0 ? ((currentClose - previousClose) / previousClose) * 100 : 0;
 
+        // Calculate Technical Indicators
+        const sma50 = calculateSMA(closes, 50);
+        const sma200 = calculateSMA(closes, 200);
+        const rsi = calculateRSI(closes, 14);
+
         return {
             ticker,
             currentVolume,
@@ -74,6 +80,9 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
             rvol,
             priceChange,
             lastPrice: meta.regularMarketPrice || currentClose || 0,
+            sma50,
+            sma200,
+            rsi,
         };
     } catch (error) {
         logger.error(`❌ Chart fetch failed for ${ticker}:`, (error as Error).message);
@@ -110,42 +119,46 @@ async function fetchFromTwelveData(ticker: string): Promise<StockData | null> {
     }
 }
 
+import pLimit from 'p-limit';
+
 /**
  * Fetch all stocks with multiple fallback strategies
  */
 export async function fetchAllStocks(tickers: string[]): Promise<StockData[]> {
-    logger.info(`🚀 Starting fetch for ${tickers.length} tickers...`);
+    logger.info(`🚀 Starting fetch for ${tickers.length} tickers using concurrency...`);
 
+    // Limit concurrency to avoid aggressive rate limiting from Yahoo/Twelve Data
+    const limit = pLimit(3);
     const results: StockData[] = [];
-    let successSource = 'unknown';
 
-    for (let i = 0; i < tickers.length; i++) {
-        const ticker = tickers[i];
-        logger.info(`[${i + 1}/${tickers.length}] Fetching ${ticker}...`);
+    const tasks = tickers.map((ticker, index) => limit(async () => {
+        logger.info(`[${index + 1}/${tickers.length}] Fetching ${ticker}...`);
 
         // Try Yahoo Chart API first
         let result = await fetchFromYahooChart(ticker);
-        if (result) {
-            successSource = 'Yahoo Chart';
-            results.push(result);
-            logger.info(`✅ ${ticker}: RVOL=${result.rvol.toFixed(2)}x (${successSource})`);
-        } else {
+        let successSource = 'Yahoo Chart';
+
+        if (!result) {
             // Try Twelve Data as fallback
             result = await fetchFromTwelveData(ticker);
-            if (result) {
-                successSource = 'Twelve Data';
-                results.push(result);
-                logger.info(`✅ ${ticker}: RVOL=${result.rvol.toFixed(2)}x (${successSource})`);
-            } else {
-                logger.warn(`❌ ${ticker}: No data from any source`);
-            }
+            successSource = 'Twelve Data';
         }
 
-        // Rate limiting delay between requests
-        if (i < tickers.length - 1) {
-            await sleep(config.batchDelayMs);
+        if (result) {
+            logger.info(`✅ ${ticker}: RVOL=${result.rvol.toFixed(2)}x (${successSource})`);
+            return result;
+        } else {
+            logger.warn(`❌ ${ticker}: No data from any source`);
+            return null;
         }
-    }
+    }));
+
+    const fetchResults = await Promise.all(tasks);
+
+    // Filter out nulls and add to final results
+    fetchResults.forEach(res => {
+        if (res) results.push(res);
+    });
 
     logger.info(`📊 Final: ${results.length}/${tickers.length} stocks fetched successfully`);
     return results;

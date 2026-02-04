@@ -15,7 +15,8 @@
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "moduleResolution": "node16"
+    "moduleResolution": "node16",
+    "isolatedModules": true
   },
   "include": [
     "src/**/*"
