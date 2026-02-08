@@ -214,7 +214,7 @@ export async function sendDailyReport(
 
     for (let i = 0; i < chunks.length; i++) {
         if (chunks.length > 1) {
-            const header = `(${i + 1}/${chunks.length})\n`;
+            const header = `📄 <b>Part ${i + 1}/${chunks.length}</b>\n\n`;
             await sendTelegramMessage(header + chunks[i]);
         } else {
             await sendTelegramMessage(chunks[i]);

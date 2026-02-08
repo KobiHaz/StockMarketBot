@@ -32,6 +32,7 @@ Required secrets:
 - `FINNHUB_API_KEY` - Get from [finnhub.io](https://finnhub.io/)
 - `TELEGRAM_BOT_TOKEN` - Create via [@BotFather](https://t.me/botfather)
 - `TELEGRAM_CHAT_ID` - Your personal chat ID
+- `GOOGLE_SHEET_ID` - Your watchlist Google Sheet ID (see [Watchlist](#watchlist) below)
 
 ### 3. Run Locally
 
@@ -47,19 +48,24 @@ npm run start
 
 ## Watchlist
 
-Edit `src/config/watchlist.json` to customize your ticker list:
+The watchlist is loaded from a **Google Sheet** at each run. You manage symbols (and optional sectors) in the sheet; the bot fetches it automatically.
 
-```json
-{
-  "tickers": ["AAPL", "MSFT", "GOOGL", ...],
-  "lastUpdated": "2026-02-01"
-}
-```
+### Setup
+
+1. **Create a Google Sheet** with two columns:
+   - **Column A:** Symbol (e.g. `AAPL`, `META`, `EXA.PA`)
+   - **Column B:** Sector (optional; e.g. `Technology`, `Healthcare`). Leave empty for "Other".
+2. **First row** can be a header: `Symbol`, `Sector` (case-insensitive).
+3. **Share the sheet:** Click Share → "Anyone with the link" → **Viewer**.
+4. **Get the Sheet ID** from the URL:
+   `https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit`
+5. Set `GOOGLE_SHEET_ID=<SHEET_ID>` in your `.env` and in GitHub Actions secrets.
 
 ## Configuration
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `GOOGLE_SHEET_ID` | — | **Required.** Google Sheet ID for watchlist (Column A = symbol, B = sector) |
 | `MIN_RVOL` | 2.0 | Minimum RVOL to trigger signal |
 | `TOP_N` | 15 | Max signals to include in report |
 | `PRICE_CHANGE_THRESHOLD` | 2 | % threshold for "volume w/o price" |

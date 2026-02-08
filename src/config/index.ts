@@ -1,15 +1,9 @@
 /**
  * Smart Volume Radar - Configuration Loader
- * Loads environment variables and watchlist configuration
+ * Loads environment variables and watchlist configuration (Google Sheets)
  */
 
 import * as dotenv from 'dotenv';
-import * as path from 'path';
-import * as fs from 'fs';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Load environment variables
 dotenv.config();
@@ -30,6 +24,9 @@ export const config = {
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
     telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
 
+    // Watchlist: Google Sheet (public CSV export)
+    googleSheetId: process.env.GOOGLE_SHEET_ID || '',
+
     // Rate limiting
     batchSize: 10,
     batchDelayMs: 500, // 500ms between tickers - Chart API is less restrictive
@@ -41,33 +38,96 @@ export const config = {
 } as const;
 
 /**
- * Tickers JSON structure
+ * Ticker entry: symbol (required) and optional sector for grouping in reports
  */
-interface TickerConfig {
+export interface TickerConfig {
     symbol: string;
     sector: string;
     description?: string;
 }
 
-interface TickersFile {
-    tickers: TickerConfig[];
-    lastUpdated: string;
-}
-
-// Internal cache for ticker data
+// Internal cache set by fetchAndCacheWatchlist(); must be called before loadWatchlist()
 let tickerCache: TickerConfig[] | null = null;
 
-function getTickers(): TickerConfig[] {
-    if (tickerCache) return tickerCache;
+const GOOGLE_SHEETS_CSV_URL = 'https://docs.google.com/spreadsheets/d/{id}/export?format=csv';
 
-    const tickersPath = path.join(__dirname, 'tickers.json');
-    if (!fs.existsSync(tickersPath)) {
-        throw new Error(`Tickers config not found at ${tickersPath}`);
+/**
+ * Fetch CSV content from a public Google Sheet
+ * @param sheetId - ID from sheet URL (between /d/ and /edit)
+ * @throws Error if request fails or non-2xx response
+ */
+export async function fetchWatchlistCsv(sheetId: string): Promise<string> {
+    const url = GOOGLE_SHEETS_CSV_URL.replace('{id}', sheetId);
+    const res = await fetch(url, { redirect: 'follow' });
+    if (!res.ok) {
+        throw new Error(
+            `Failed to fetch watchlist: ${res.status} ${res.statusText}. Check GOOGLE_SHEET_ID and that the sheet is shared "Anyone with the link can view".`
+        );
+    }
+    return res.text();
+}
+
+/**
+ * Parse CSV from Google Sheets into TickerConfig[].
+ * - First row: treated as header if it looks like "Symbol" / "Sector" (case-insensitive), then skipped
+ * - Column A: symbol (required); empty rows skipped
+ * - Column B: sector (optional); default "Other" if empty
+ */
+export function parseWatchlistCsv(csv: string): TickerConfig[] {
+    const lines = csv.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    if (lines.length === 0) {
+        throw new Error('Watchlist sheet is empty.');
     }
 
-    const rawData = fs.readFileSync(tickersPath, 'utf-8');
-    const data: TickersFile = JSON.parse(rawData);
-    tickerCache = data.tickers;
+    const rows: string[][] = [];
+    for (const line of lines) {
+        // Simple CSV: split by comma; strip surrounding quotes from each cell
+        const cells = line.split(',').map((cell) => cell.trim().replace(/^"|"$/g, ''));
+        rows.push(cells);
+    }
+
+    const isHeaderRow = (cells: string[]): boolean => {
+        const first = (cells[0] || '').toLowerCase();
+        return first === 'symbol' || first === 'sector' || first.includes('symbol') || first.includes('sector');
+    };
+
+    const startIndex = rows.length > 0 && isHeaderRow(rows[0]) ? 1 : 0;
+    const tickers: TickerConfig[] = [];
+
+    for (let i = startIndex; i < rows.length; i++) {
+        const cells = rows[i];
+        const symbol = (cells[0] || '').trim();
+        if (!symbol) continue;
+        const sector = (cells[1] || '').trim() || 'Other';
+        tickers.push({ symbol, sector });
+    }
+
+    if (tickers.length === 0) {
+        throw new Error('Watchlist sheet has no valid ticker rows (Column A = symbol).');
+    }
+
+    return tickers;
+}
+
+/**
+ * Fetch watchlist from Google Sheet and cache it. Must be called once before loadWatchlist() / getSectorForTicker().
+ * @throws Error if GOOGLE_SHEET_ID is missing, fetch fails, or sheet is empty
+ */
+export async function fetchAndCacheWatchlist(): Promise<void> {
+    const sheetId = config.googleSheetId.trim();
+    if (!sheetId) {
+        throw new Error('GOOGLE_SHEET_ID is required. Set it to your Google Sheet ID (from the sheet URL).');
+    }
+    const csv = await fetchWatchlistCsv(sheetId);
+    tickerCache = parseWatchlistCsv(csv);
+}
+
+function getTickers(): TickerConfig[] {
+    if (tickerCache === null) {
+        throw new Error(
+            'Watchlist not loaded. Call fetchAndCacheWatchlist() once before loadWatchlist() or getSectorForTicker().'
+        );
+    }
     return tickerCache;
 }
 
@@ -99,6 +159,7 @@ export function validateConfig(): void {
     if (!config.finnhubApiKey) missing.push('FINNHUB_API_KEY');
     if (!config.telegramBotToken) missing.push('TELEGRAM_BOT_TOKEN');
     if (!config.telegramChatId) missing.push('TELEGRAM_CHAT_ID');
+    if (!config.googleSheetId?.trim()) missing.push('GOOGLE_SHEET_ID');
 
     if (missing.length > 0) {
         throw new Error(`Missing required environment variables: ${missing.join(', ')}`);

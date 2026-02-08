@@ -3,7 +3,7 @@
  * Orchestrates the daily stock volume scan and reporting
  */
 
-import { loadWatchlist, validateConfig, config, getSectorForTicker } from './config/index.js';
+import { loadWatchlist, validateConfig, config, getSectorForTicker, fetchAndCacheWatchlist } from './config/index.js';
 import { fetchAllStocks } from './services/marketData.js';
 import { calculateRVOL } from './services/rvolCalculator.js';
 import { enrichWithNews } from './services/newsService.js';
@@ -91,7 +91,8 @@ async function main(): Promise<void> {
             logger.info('Continuing with available configuration...');
         }
 
-        // 3. Load watchlist
+        // 3. Fetch watchlist from Google Sheet and load symbols
+        await fetchAndCacheWatchlist();
         const tickers = loadWatchlist();
         logger.info(`📋 Loaded ${tickers.length} tickers to scan`);
 

@@ -1,0 +1,119 @@
+/**
+ * Watchlist (Google Sheets CSV) tests
+ * Tests parseWatchlistCsv and fetchAndCacheWatchlist with mocked fetch
+ */
+
+import { parseWatchlistCsv, fetchWatchlistCsv, fetchAndCacheWatchlist, loadWatchlist, getSectorForTicker } from '../src/config/index';
+
+// Mock global fetch
+const mockFetch = jest.fn();
+global.fetch = mockFetch as typeof fetch;
+
+describe('parseWatchlistCsv', () => {
+    it('parses CSV with header row and two columns', () => {
+        const csv = 'Symbol,Sector\nAAPL,Technology\nMETA,Technology\nXOM,Energy';
+        const result = parseWatchlistCsv(csv);
+        expect(result).toHaveLength(3);
+        expect(result[0]).toEqual({ symbol: 'AAPL', sector: 'Technology' });
+        expect(result[1]).toEqual({ symbol: 'META', sector: 'Technology' });
+        expect(result[2]).toEqual({ symbol: 'XOM', sector: 'Energy' });
+    });
+
+    it('skips first row when it looks like header (symbol/sector)', () => {
+        const csv = 'symbol,sector\nGOOGL,Technology';
+        const result = parseWatchlistCsv(csv);
+        expect(result).toHaveLength(1);
+        expect(result[0]).toEqual({ symbol: 'GOOGL', sector: 'Technology' });
+    });
+
+    it('defaults sector to Other when column B is empty', () => {
+        const csv = 'NVDA,\nAMD,Technology';
+        const result = parseWatchlistCsv(csv);
+        expect(result[0]).toEqual({ symbol: 'NVDA', sector: 'Other' });
+        expect(result[1]).toEqual({ symbol: 'AMD', sector: 'Technology' });
+    });
+
+    it('skips empty symbol rows', () => {
+        const csv = 'Symbol,Sector\nAAPL,Tech\n,\nMETA,Tech';
+        const result = parseWatchlistCsv(csv);
+        expect(result).toHaveLength(2);
+        expect(result[0].symbol).toBe('AAPL');
+        expect(result[1].symbol).toBe('META');
+    });
+
+    it('handles CSV without header (no skip)', () => {
+        const csv = 'AAPL,Technology\nMETA,Technology';
+        const result = parseWatchlistCsv(csv);
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({ symbol: 'AAPL', sector: 'Technology' });
+    });
+
+    it('trims whitespace from cells', () => {
+        const csv = '  AAPL  ,  Technology  ';
+        const result = parseWatchlistCsv(csv);
+        expect(result[0]).toEqual({ symbol: 'AAPL', sector: 'Technology' });
+    });
+
+    it('throws on empty CSV', () => {
+        expect(() => parseWatchlistCsv('')).toThrow('Watchlist sheet is empty');
+    });
+
+    it('throws when no valid ticker rows', () => {
+        const csv = 'Symbol,Sector\n,\n,';
+        expect(() => parseWatchlistCsv(csv)).toThrow('Watchlist sheet has no valid ticker rows');
+    });
+});
+
+describe('fetchWatchlistCsv', () => {
+    it('returns response text on 200', async () => {
+        mockFetch.mockResolvedValueOnce({ ok: true, text: () => Promise.resolve('Symbol,Sector\nAAPL,Tech') });
+        const out = await fetchWatchlistCsv('abc123');
+        expect(out).toBe('Symbol,Sector\nAAPL,Tech');
+        expect(mockFetch).toHaveBeenCalledWith(
+            'https://docs.google.com/spreadsheets/d/abc123/export?format=csv',
+            expect.any(Object)
+        );
+    });
+
+    it('throws on non-2xx response', async () => {
+        mockFetch.mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' });
+        await expect(fetchWatchlistCsv('bad')).rejects.toThrow(
+            /Failed to fetch watchlist: 404/
+        );
+    });
+});
+
+describe('fetchAndCacheWatchlist', () => {
+    const envKey = 'GOOGLE_SHEET_ID';
+
+    beforeEach(() => {
+        mockFetch.mockReset();
+    });
+
+    it('throws when GOOGLE_SHEET_ID is missing', async () => {
+        const envBefore = process.env[envKey];
+        process.env[envKey] = '   ';
+        jest.resetModules();
+        const mod = await import('../src/config/index.js');
+        await expect(mod.fetchAndCacheWatchlist()).rejects.toThrow('GOOGLE_SHEET_ID is required');
+        process.env[envKey] = envBefore;
+        jest.resetModules();
+    });
+
+    it('fetches CSV and caches; loadWatchlist and getSectorForTicker use cache', async () => {
+        const envBefore = process.env[envKey];
+        process.env[envKey] = 'test-sheet-id';
+        jest.resetModules();
+        mockFetch.mockResolvedValueOnce({
+            ok: true,
+            text: () => Promise.resolve('Symbol,Sector\nAAPL,Technology\nMETA,Technology'),
+        });
+        const mod = await import('../src/config/index.js');
+        await mod.fetchAndCacheWatchlist();
+        expect(mod.loadWatchlist()).toEqual(['AAPL', 'META']);
+        expect(mod.getSectorForTicker('AAPL')).toBe('Technology');
+        expect(mod.getSectorForTicker('UNKNOWN')).toBe('Other');
+        process.env[envKey] = envBefore;
+        jest.resetModules();
+    });
+});
