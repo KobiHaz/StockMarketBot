@@ -1,6 +1,6 @@
 /**
  * Smart Volume Radar - Technical Analysis Utility
- * Calculates SMA and RSI from price history
+ * Calculates SMA, RSI, ATH, and consolidation metrics from price history
  */
 
 /**
@@ -13,26 +13,77 @@ export function calculateSMA(prices: number[], periods: number): number | undefi
     return sum / periods;
 }
 
+/** ~21 trading days per month */
+const TRADING_DAYS_PER_MONTH = 21;
+
 /**
- * Calculate Relative Strength Index (RSI)
+ * Calculate Period High (5Y), % from high, and months in consolidation
+ * Note: Input is limited to 5 years; "ATH" in variable names = PeriodHigh_5Y
+ */
+export function calculateAthAndConsolidation(closes: number[]): {
+    ath: number;
+    pctFromAth: number;
+    monthsInConsolidation: number;
+} | null {
+    if (closes.length < 22) return null; // need ~1 month of data
+    const ath = Math.max(...closes);
+    const lastClose = closes[closes.length - 1];
+    const pctFromAth = ath > 0 ? ((lastClose - ath) / ath) * 100 : 0;
+
+    // Find last index where price was within 2% of ATH (most recent touch)
+    let athIndex = -1;
+    const athThreshold = ath * 0.98;
+    for (let i = closes.length - 1; i >= 0; i--) {
+        if (closes[i] >= athThreshold) {
+            athIndex = i;
+            break;
+        }
+    }
+    const tradingDaysSinceAth = athIndex >= 0 ? closes.length - 1 - athIndex : closes.length - 1;
+    const monthsInConsolidation = tradingDaysSinceAth / TRADING_DAYS_PER_MONTH;
+
+    return { ath, pctFromAth, monthsInConsolidation };
+}
+
+/**
+ * Check if price is "touching" SMA (within threshold %)
+ */
+export function isNearSMA(price: number, sma: number, thresholdPct: number): boolean {
+    if (sma <= 0) return false;
+    const pctDiff = Math.abs(price - sma) / sma * 100;
+    return pctDiff <= thresholdPct;
+}
+
+/**
+ * Calculate Relative Strength Index (RSI) using Wilder's Smoothing
+ * Matches TradingView and standard charting platforms.
+ * First 14 periods: simple average of gains/losses.
+ * Thereafter: ((PreviousAvg * 13) + Current) / 14
  */
 export function calculateRSI(prices: number[], periods: number = 14): number | undefined {
     if (prices.length < periods + 1) return undefined;
 
-    let gains = 0;
-    let losses = 0;
-
-    for (let i = prices.length - periods; i < prices.length; i++) {
+    let sumGain = 0;
+    let sumLoss = 0;
+    for (let i = 1; i <= periods && i < prices.length; i++) {
         const diff = prices[i] - prices[i - 1];
-        if (diff >= 0) {
-            gains += diff;
-        } else {
-            losses -= diff;
-        }
+        sumGain += diff >= 0 ? diff : 0;
+        sumLoss += diff < 0 ? -diff : 0;
     }
 
-    if (losses === 0) return 100;
+    let avgGain = sumGain / periods;
+    let avgLoss = sumLoss / periods;
 
-    const rs = gains / losses;
+    for (let i = periods + 1; i < prices.length; i++) {
+        const diff = prices[i] - prices[i - 1];
+        const gain = diff >= 0 ? diff : 0;
+        const loss = diff < 0 ? -diff : 0;
+        avgGain = (avgGain * (periods - 1) + gain) / periods;
+        avgLoss = (avgLoss * (periods - 1) + loss) / periods;
+    }
+
+    if (avgLoss === 0) return 100;
+
+    const rs = avgGain / avgLoss;
     return 100 - (100 / (1 + rs));
 }

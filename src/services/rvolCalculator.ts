@@ -14,8 +14,22 @@ export interface RVOLCalcResult {
     volumeWithoutPrice: StockData[];
 }
 
+/** Full setup: near SMA21, near ATH, in 6mo-3y window */
+function isFullConsolidationSetup(s: StockData): boolean {
+    return !!(s.nearSMA21 && s.nearAth && s.inConsolidationWindow);
+}
+
+/** Close setup: flexible - e.g. 4mo base, 17% from ATH - worth watching */
+function isCloseConsolidationSetup(s: StockData): boolean {
+    const smaOk = s.nearSMA21 || s.nearSMA21Close;
+    const athOk = s.nearAth || s.nearAthClose;
+    const baseOk = s.inConsolidationWindow || s.inConsolidationClose;
+    return !!(smaOk && athOk && baseOk);
+}
+
 /**
  * Calculate RVOL and filter/rank stocks
+ * Boosts stocks in consolidation setup (near SMA21, near ATH, 6mo-3y base)
  * @param stocks - Array of stock data
  * @param config - RVOL configuration
  * @returns Top signals and volume-without-price stocks
@@ -28,8 +42,20 @@ export function calculateRVOL(stocks: StockData[], rvolConfig: RVOLConfig): RVOL
 
     logger.info(`Found ${highRVOL.length} stocks with RVOL >= ${minRVOL}`);
 
-    // Sort by RVOL descending
-    highRVOL.sort((a, b) => b.rvol - a.rvol);
+    // Sort by RVOL descending, with consolidation setup as tie-breaker (full > close > none)
+    highRVOL.sort((a, b) => {
+        const rvolDiff = b.rvol - a.rvol;
+        if (Math.abs(rvolDiff) >= 0.5) return rvolDiff > 0 ? 1 : -1; // RVOL dominates
+        const boostA = isFullConsolidationSetup(a) ? 2 : isCloseConsolidationSetup(a) ? 1 : 0;
+        const boostB = isFullConsolidationSetup(b) ? 2 : isCloseConsolidationSetup(b) ? 1 : 0;
+        return boostB - boostA || rvolDiff;
+    });
+
+    const fullCount = highRVOL.filter(isFullConsolidationSetup).length;
+    const closeCount = highRVOL.filter(isCloseConsolidationSetup).length;
+    if (fullCount > 0 || closeCount > 0) {
+        logger.info(`Identified ${fullCount} full + ${closeCount} close consolidation setup(s)`);
+    }
 
     // Top N signals
     const topSignals = highRVOL.slice(0, topN);

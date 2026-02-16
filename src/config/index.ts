@@ -17,6 +17,18 @@ export const config = {
     topN: parseInt(process.env.TOP_N || '15', 10),
     priceChangeThreshold: parseFloat(process.env.PRICE_CHANGE_THRESHOLD || '2'),
 
+    // Consolidation / pre-breakout indicators (flexible: show full ✓ and close ~)
+    consolidationMinMonths: parseInt(process.env.CONSOLIDATION_MIN_MONTHS || '6', 10),
+    consolidationMaxMonths: parseInt(process.env.CONSOLIDATION_MAX_MONTHS || '36', 10),
+    consolidationCloseMinMonths: parseInt(process.env.CONSOLIDATION_CLOSE_MIN_MONTHS || '4', 10), // 4–6mo = close
+    athThresholdPct: parseFloat(process.env.ATH_THRESHOLD_PCT || '20'), // within 20% of ATH
+    athCloseThresholdPct: parseFloat(process.env.ATH_CLOSE_THRESHOLD_PCT || '25'), // 20–25% = close
+    sma21TouchThresholdPct: parseFloat(process.env.SMA21_TOUCH_THRESHOLD_PCT || '3'), // within 3% = touching
+    sma21CloseThresholdPct: parseFloat(process.env.SMA21_CLOSE_THRESHOLD_PCT || '5'), // 3–5% = close
+
+    // Prefer fetching RSI/SMA from Twelve Data instead of calculating (when key is set)
+    useFetchedIndicators: process.env.USE_FETCHED_INDICATORS !== 'false',
+
     // API Keys
     finnhubApiKey: process.env.FINNHUB_API_KEY || '',
 

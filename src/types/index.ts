@@ -15,8 +15,29 @@ export interface StockData {
     lastPrice: number;
     sma50?: number;
     sma200?: number;
+    sma21?: number;
     rsi?: number;
     sector?: string;
+    /** All-time high from available price history */
+    ath?: number;
+    /** Source of high: 5y = Yahoo 5-year history, 52w = Twelve Data 52-week high */
+    athSource?: '5y' | '52w';
+    /** Percentage distance from ATH (e.g. -15 = 15% below ATH) */
+    pctFromAth?: number;
+    /** Months since ATH was reached (approx consolidation duration) */
+    monthsInConsolidation?: number;
+    /** Price within threshold of SMA21 */
+    nearSMA21?: boolean;
+    /** Within 20% of ATH */
+    nearAth?: boolean;
+    /** Consolidation duration in 6mo–3y window */
+    inConsolidationWindow?: boolean;
+    /** Close to SMA21 (within wider band, e.g. 3–5%) */
+    nearSMA21Close?: boolean;
+    /** Close to ATH (e.g. 20–25% from high) */
+    nearAthClose?: boolean;
+    /** Close to consolidation window (e.g. 4–6mo) */
+    inConsolidationClose?: boolean;
 }
 
 /**

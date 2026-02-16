@@ -4,12 +4,14 @@
 
 ## Features
 
-- 📊 **RVOL Analysis**: Calculates Relative Volume (today's volume / 20-day average)
-- 🎯 **Signal Detection**: Identifies stocks with RVOL ≥ 2.0
+- 📊 **RVOL Analysis**: Calculates Relative Volume (today's volume / 63-day average)
+- 🎯 **Signal Detection**: Identifies stocks with RVOL ≥ 2.0 (configurable)
 - 🔕 **Silent Accumulation**: Flags high-volume stocks with minimal price movement
+- 📈 **Technical Context**: RSI, trend vs SMA50, and pre-breakout setup (SMA21, distance from high, base length)
 - 📰 **News Enrichment**: Attaches recent headlines from Finnhub
-- 📱 **Telegram Delivery**: Sends formatted reports to your phone
+- 📱 **Telegram Delivery**: Formatted reports with TradingView/Yahoo/BIZ links
 - ⏰ **Automated Scheduling**: Runs daily via GitHub Actions
+- 📋 **Google Sheet Watchlist**: Manage symbols and sectors in a sheet; no code changes needed
 
 ## Quick Start
 
@@ -68,7 +70,18 @@ The watchlist is loaded from a **Google Sheet** at each run. You manage symbols 
 | `GOOGLE_SHEET_ID` | — | **Required.** Google Sheet ID for watchlist (Column A = symbol, B = sector) |
 | `MIN_RVOL` | 2.0 | Minimum RVOL to trigger signal |
 | `TOP_N` | 15 | Max signals to include in report |
-| `PRICE_CHANGE_THRESHOLD` | 2 | % threshold for "volume w/o price" |
+| `PRICE_CHANGE_THRESHOLD` | 2 | % threshold for "volume w/o price" (silent activity) |
+| `TWELVE_DATA_API_KEY` | — | **Optional.** Fetch RSI/SMA from Twelve Data; also used as fallback when Yahoo fails |
+| `USE_FETCHED_INDICATORS` | true | Set to `false` to always calculate RSI/SMA locally |
+| `CONSOLIDATION_MIN_MONTHS` | 6 | Min base length (months) for full setup ✓ |
+| `CONSOLIDATION_MAX_MONTHS` | 36 | Max base length for full setup ✓ |
+| `CONSOLIDATION_CLOSE_MIN_MONTHS` | 4 | Min base for "close" setup ~ |
+| `ATH_THRESHOLD_PCT` | 20 | Within this % of high = full ✓ |
+| `ATH_CLOSE_THRESHOLD_PCT` | 25 | 20–25% = close ~ |
+| `SMA21_TOUCH_THRESHOLD_PCT` | 3 | Within 3% of SMA21 = full ✓ |
+| `SMA21_CLOSE_THRESHOLD_PCT` | 5 | 3–5% = close ~ |
+
+See [docs/INDICATOR_SOURCES.md](docs/INDICATOR_SOURCES.md) for fetch vs. calculate for technical indicators, and [docs/MESSAGE_GUIDE.md](docs/MESSAGE_GUIDE.md) for how signals and setup indicators are shown in the report.
 
 ## Sample Output
 
@@ -77,20 +90,32 @@ The watchlist is loaded from a **Google Sheet** at each run. You manage symbols 
 📅 2026-02-01 | 12 Signals Found
 ━━━━━━━━━━━━━━━━━━━━━━
 
-🟢 NVDA +8.42%
-📈 RVOL: 4.82x
-📰 News:
-   • NVIDIA Reports Record Q4 Revenue...
+↗️ NVDA
+📊 RVOL 4.82x  •  Price +8.42%
+📈 RSI 68  •  Above SMA50
+🎯 Setup 🎯
+   SMA21  1.2% ✓   High  -12% from 5y ✓   Base  14mo ✓
+⛓ TV  YF  BIZ
+📑 News: NVIDIA Reports Record Q4 Revenue...
 
-🔴 AMD -3.21%
-📈 RVOL: 3.15x
-📰 News:
-   • AMD Faces Supply Chain Challenges...
+↘️ AMD
+📊 RVOL 3.15x  •  Price -3.21%
+📈 RSI 42  •  Below SMA50
+🎯 Setup 👀
+   SMA21  4.1% ~   High  -18% from 5y ✓   Base  8mo ✓
+⛓ TV  YF
+📑 AMD Faces Supply Chain Challenges...
 
 ━━━━━━━━━━━━━━━━━━━━━━
 🔕 Volume w/o Price (Silent Activity)
 MSFT (2.1x), ORCL (2.3x)
 ```
+
+## Documentation
+
+- **[MESSAGE_GUIDE.md](docs/MESSAGE_GUIDE.md)** – What each field and emoji means in the Telegram report
+- **[CALCULATIONS.md](docs/CALCULATIONS.md)** – Exact formulas for RVOL, RSI, SMA, and setup metrics
+- **[INDICATOR_SOURCES.md](docs/INDICATOR_SOURCES.md)** – Using Twelve Data vs. local calculation for indicators
 
 ## Project Structure
 
@@ -98,17 +123,23 @@ MSFT (2.1x), ORCL (2.3x)
 smart-volume-radar/
 ├── src/
 │   ├── index.ts           # Main entry
-│   ├── config/            # Configuration & watchlist
+│   ├── config/            # Configuration & Google Sheet watchlist
 │   ├── services/          # Core business logic
-│   │   ├── marketData.ts  # Yahoo Finance integration
+│   │   ├── marketData.ts  # Yahoo Finance (and Twelve Data fallback)
 │   │   ├── rvolCalculator.ts
 │   │   ├── newsService.ts # Finnhub integration
 │   │   └── telegramBot.ts # Telegram messaging
 │   ├── types/             # TypeScript interfaces
-│   └── utils/             # Helpers & error handling
+│   └── utils/             # Helpers, technical analysis, error handling
+├── docs/                  # Message guide, calculations, indicator sources
+├── scripts/               # Utilities (e.g. send-legend to Telegram)
 ├── tests/                 # Unit tests
 └── .github/workflows/     # GitHub Actions
 ```
+
+## Scripts
+
+- **Send legend to Telegram**: `npx tsx scripts/send-legend.ts` (sends the report legend once; requires env vars).
 
 ## License
 

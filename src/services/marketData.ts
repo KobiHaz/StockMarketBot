@@ -5,17 +5,16 @@
 
 import { StockData } from '../types/index.js';
 import { config } from '../config/index.js';
-import { sleep } from '../utils/errorHandler.js';
 import logger from '../utils/logger.js';
-import { calculateSMA, calculateRSI } from '../utils/technicalAnalysis.js';
+import { calculateSMA, calculateRSI, calculateAthAndConsolidation, isNearSMA } from '../utils/technicalAnalysis.js';
 
 /**
  * Direct fetch from Yahoo Finance chart API
- * This endpoint is sometimes less restricted than the quote API
+ * Uses 5y range for ATH and consolidation duration (6mo-3y window)
  */
 async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
     try {
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1y`;
+        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5y`;
 
         const response = await fetch(url, {
             headers: {
@@ -55,9 +54,13 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
         // Current volume is the last entry
         const currentVolume = volumes[volumes.length - 1] || 0;
 
-        // Average volume from previous days (exclude today)
+        // Average volume: 63-day SMA (industry standard ~3-month lookback for RVOL)
+        const VOLUME_RVOL_LOOKBACK = 63;
         const historicalVolumes = volumes.slice(0, -1);
-        const avgVolume = historicalVolumes.reduce((a: number, b: number) => a + b, 0) / historicalVolumes.length;
+        const lookbackVolumes = historicalVolumes.slice(-VOLUME_RVOL_LOOKBACK);
+        const avgVolume = lookbackVolumes.length > 0
+            ? lookbackVolumes.reduce((a: number, b: number) => a + b, 0) / lookbackVolumes.length
+            : 0;
 
         if (avgVolume === 0) return null;
 
@@ -69,9 +72,51 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
         const priceChange = previousClose > 0 ? ((currentClose - previousClose) / previousClose) * 100 : 0;
 
         // Calculate Technical Indicators
+        const sma21 = calculateSMA(closes, 21);
         const sma50 = calculateSMA(closes, 50);
         const sma200 = calculateSMA(closes, 200);
         const rsi = calculateRSI(closes, 14);
+
+        const lastPrice = meta.regularMarketPrice || currentClose || 0;
+
+        // ATH and consolidation (pre-breakout indicators)
+        const athData = calculateAthAndConsolidation(closes);
+        let ath: number | undefined;
+        let pctFromAth: number | undefined;
+        let monthsInConsolidation: number | undefined;
+        let nearAth: boolean | undefined;
+        let inConsolidationWindow: boolean | undefined;
+
+        let nearAthClose: boolean | undefined;
+        let inConsolidationClose: boolean | undefined;
+        if (athData) {
+            ath = athData.ath;
+            pctFromAth = athData.pctFromAth;
+            monthsInConsolidation = athData.monthsInConsolidation;
+            const absPct = Math.abs(athData.pctFromAth);
+            nearAth = absPct <= config.athThresholdPct;
+            nearAthClose = absPct > config.athThresholdPct && absPct <= config.athCloseThresholdPct;
+            inConsolidationWindow =
+                athData.monthsInConsolidation >= config.consolidationMinMonths &&
+                athData.monthsInConsolidation <= config.consolidationMaxMonths;
+            inConsolidationClose = !inConsolidationWindow &&
+                athData.monthsInConsolidation >= config.consolidationCloseMinMonths &&
+                athData.monthsInConsolidation < config.consolidationMinMonths;
+        }
+
+        let finalSma21 = sma21;
+        let finalRsi = rsi;
+
+        if (config.useFetchedIndicators && process.env.TWELVE_DATA_API_KEY) {
+            const fetched = await fetchIndicatorsFromTwelveData(ticker, process.env.TWELVE_DATA_API_KEY);
+            if (fetched.rsi != null) finalRsi = fetched.rsi;
+            if (fetched.sma21 != null) finalSma21 = fetched.sma21;
+        }
+
+        const nearSMA21 = finalSma21 ? isNearSMA(lastPrice, finalSma21, config.sma21TouchThresholdPct) : undefined;
+        const nearSMA21Close = finalSma21 && !nearSMA21
+            ? isNearSMA(lastPrice, finalSma21, config.sma21CloseThresholdPct)
+            : undefined;
 
         return {
             ticker,
@@ -79,10 +124,21 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
             avgVolume,
             rvol,
             priceChange,
-            lastPrice: meta.regularMarketPrice || currentClose || 0,
+            lastPrice,
+            sma21: finalSma21,
             sma50,
             sma200,
-            rsi,
+            rsi: finalRsi,
+            ath,
+            athSource: '5y',
+            pctFromAth,
+            monthsInConsolidation,
+            nearSMA21,
+            nearAth,
+            inConsolidationWindow,
+            nearSMA21Close,
+            nearAthClose,
+            inConsolidationClose,
         };
     } catch (error) {
         logger.error(`❌ Chart fetch failed for ${ticker}:`, (error as Error).message);
@@ -90,15 +146,47 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
     }
 }
 
+/** Twelve Data API base */
+const TWELVE_DATA_BASE = 'https://api.twelvedata.com';
+
 /**
- * Fetch from Twelve Data API (reliable free tier)
+ * Fetch RSI and SMA21 from Twelve Data (pre-calculated, no local calculation)
+ */
+async function fetchIndicatorsFromTwelveData(
+    ticker: string,
+    apiKey: string
+): Promise<{ rsi?: number; sma21?: number }> {
+    const result: { rsi?: number; sma21?: number } = {};
+    try {
+        const [rsiRes, smaRes] = await Promise.all([
+            fetch(`${TWELVE_DATA_BASE}/rsi?symbol=${ticker}&interval=1day&time_period=14&apikey=${apiKey}`),
+            fetch(`${TWELVE_DATA_BASE}/sma?symbol=${ticker}&interval=1day&time_period=21&series_type=close&apikey=${apiKey}`),
+        ]);
+
+        const rsiData = (await rsiRes.json()) as any;
+        if (rsiData?.status === 'ok' && rsiData?.values?.[0]?.rsi != null) {
+            result.rsi = parseFloat(rsiData.values[0].rsi);
+        }
+
+        const smaData = (await smaRes.json()) as any;
+        if (smaData?.status === 'ok' && smaData?.values?.[0]?.sma != null) {
+            result.sma21 = parseFloat(smaData.values[0].sma);
+        }
+    } catch {
+        // Silently fall back to calculated values
+    }
+    return result;
+}
+
+/**
+ * Fetch from Twelve Data API – fetches RSI, SMA21, 52w high when available
  */
 async function fetchFromTwelveData(ticker: string): Promise<StockData | null> {
     const apiKey = process.env.TWELVE_DATA_API_KEY;
     if (!apiKey) return null;
 
     try {
-        const url = `https://api.twelvedata.com/quote?symbol=${ticker}&apikey=${apiKey}`;
+        const url = `${TWELVE_DATA_BASE}/quote?symbol=${ticker}&apikey=${apiKey}`;
         const response = await fetch(url);
         const data = await response.json() as any;
 
@@ -106,15 +194,46 @@ async function fetchFromTwelveData(ticker: string): Promise<StockData | null> {
             return null;
         }
 
+        const volume = parseFloat(data.volume) || 0;
+        const avgVolume = parseFloat(data.average_volume) || parseFloat(data.volume) || 1;
+        const lastPrice = parseFloat(data.close) || 0;
+        const fiftyTwoWeek = data.fifty_two_week;
+        const high52w = fiftyTwoWeek?.high != null ? parseFloat(fiftyTwoWeek.high) : undefined;
+
+        let rsi: number | undefined;
+        let sma21: number | undefined;
+        const indicators = await fetchIndicatorsFromTwelveData(ticker, apiKey);
+        rsi = indicators.rsi;
+        sma21 = indicators.sma21;
+
+        const ath = high52w;
+        const pctFromAth = ath != null && ath > 0 ? ((lastPrice - ath) / ath) * 100 : undefined;
+        const absPct = pctFromAth != null ? Math.abs(pctFromAth) : Infinity;
+        const nearAth = pctFromAth != null && absPct <= config.athThresholdPct;
+        const nearAthClose = pctFromAth != null && absPct > config.athThresholdPct && absPct <= config.athCloseThresholdPct;
+
+        const nearSMA21 = sma21 ? isNearSMA(lastPrice, sma21, config.sma21TouchThresholdPct) : undefined;
+        const nearSMA21Close = sma21 && !nearSMA21 ? isNearSMA(lastPrice, sma21, config.sma21CloseThresholdPct) : undefined;
+
         return {
             ticker,
-            currentVolume: parseFloat(data.volume) || 0,
-            avgVolume: parseFloat(data.average_volume) || parseFloat(data.volume) || 1,
-            rvol: parseFloat(data.volume) / (parseFloat(data.average_volume) || 1),
+            currentVolume: volume,
+            avgVolume,
+            rvol: volume / avgVolume,
             priceChange: parseFloat(data.percent_change) || 0,
-            lastPrice: parseFloat(data.close) || 0,
+            lastPrice,
+            sma21,
+            rsi,
+            ath,
+            athSource: '52w',
+            pctFromAth,
+            nearSMA21,
+            nearAth,
+            nearAthClose,
+            nearSMA21Close,
         };
     } catch (error) {
+        logger.error(`❌ Twelve Data fetch failed for ${ticker}:`, (error as Error).message);
         return null;
     }
 }
