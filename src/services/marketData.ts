@@ -6,11 +6,11 @@
 import { StockData } from '../types/index.js';
 import { config } from '../config/index.js';
 import logger from '../utils/logger.js';
-import { calculateSMA, calculateRSI, calculateAthAndConsolidation, isNearSMA } from '../utils/technicalAnalysis.js';
+import { calculateSMA, calculateRSI, calculate52wHighAndConsolidation, isNearSMA } from '../utils/technicalAnalysis.js';
 
 /**
  * Direct fetch from Yahoo Finance chart API
- * Uses 5y range for ATH and consolidation duration (6mo-3y window)
+ * Uses 5y range for price history; 52w high and consolidation use last 252 days
  */
 async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
     try {
@@ -79,8 +79,8 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
 
         const lastPrice = meta.regularMarketPrice || currentClose || 0;
 
-        // ATH and consolidation (pre-breakout indicators)
-        const athData = calculateAthAndConsolidation(closes);
+        // 52-week high and consolidation (pre-breakout indicators)
+        const athData = calculate52wHighAndConsolidation(closes);
         let ath: number | undefined;
         let pctFromAth: number | undefined;
         let monthsInConsolidation: number | undefined;
@@ -130,7 +130,7 @@ async function fetchFromYahooChart(ticker: string): Promise<StockData | null> {
             sma200,
             rsi: finalRsi,
             ath,
-            athSource: '5y',
+            athSource: '52w',
             pctFromAth,
             monthsInConsolidation,
             nearSMA21,

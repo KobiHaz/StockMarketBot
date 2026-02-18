@@ -73,7 +73,7 @@ describe('Telegram Formatter', () => {
         it('should include news when available', () => {
             const report = formatDailyReport('2026-02-01', mockSignals, []);
 
-            expect(report).toContain('📑 <b>News:</b>');
+            expect(report).toContain('📑');
             expect(report).toContain('NVIDIA Reports Record Q4 Revenue');
         });
 
@@ -95,10 +95,10 @@ describe('Telegram Formatter', () => {
 
             // NVDA is up (6.25%) - has high RVOL so gets ⚡️ emoji
             expect(report).toContain('NVDA');
-            expect(report).toMatch(/Price: 🟢.*\+6\.25%/);
+            expect(report).toContain('🟢 +6.25%');
             // AMD is down (-3.33%)
             expect(report).toContain('AMD');
-            expect(report).toMatch(/Price: 🔴.*-3\.33%/);
+            expect(report).toContain('🔴 -3.33%');
         });
     });
 });

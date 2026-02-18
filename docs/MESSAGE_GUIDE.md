@@ -26,11 +26,13 @@ Each stock appears in this structure:
 
 ```
 ↗️ TICKER (link to TV)
-├ 📊 RVOL X.XXx  •  Price ±X.XX%
-├ 📈 RSI XX  •  Above/Below SMA50
+├ 📊 RVOL X.XXx
+├ Price ±X.XX%
+├ 📈 RSI XX
+├ Above/Below SMA50
 ├ 🎯 Setup [🎯/👀]
 │   SMA21  X.X% ✓ (req ≤3%)   or  X.X% ~ (X.X% over 3%, under 5% close)   or  ✗
-│   High   -X% from 5y ✓ (req ≤20%)   or  ~   or  ✗
+│   High   -X% from 52w ✓ (req ≤20%)   or  ~   or  ✗
 │   Base   Xmo base ✓ (req 6–36mo)   or  ~   or  ✗
 ├ ⛓ TV  YF  BIZ/X
 └ 📑 News or link
@@ -60,10 +62,10 @@ Each indicator shows the actual value plus status:
 | Indicator | ✓ Met | ~ Close | ✗ Not Met |
 |-----------|-------|---------|-----------|
 | **SMA21** | Distance ≤3% from SMA21 | 3–5% from SMA21 (shows how much over 3%) | &gt;5% (shows how far over) |
-| **High** | Within 20% of 5y/52w high | 20–25% from high | &gt;25% from high |
+| **High** | Within 20% of 52-week high | 20–25% from high | &gt;25% from high |
 | **Base** | 6–36 months in consolidation | 4–6 months (1–2mo short) | &lt;4mo or &gt;36mo |
 
-**Labels:** `5y` = Yahoo 5-year high; `52w` = Twelve Data 52-week high (fallback)
+**Label:** `52w` = 52-week high (last 252 trading days)
 
 ---
 
@@ -133,7 +135,7 @@ For exact formulas and verification, see **[CALCULATIONS.md](CALCULATIONS.md)**.
 - **RVOL** = today’s volume ÷ 63-day SMA of volume
 - **Price Change %** = (close − previous close) ÷ previous close × 100
 - **SMA50, SMA200** = simple moving average of last 50/200 closes
-- **5y ATH** = max of 5-year price history (Yahoo)
+- **52w high** = max of last 252 trading days (Yahoo / Twelve Data)
 - **pctFromAth** = (price − ATH) ÷ ATH × 100
 - **monthsInConsolidation** = trading days since last ATH touch ÷ 21
 - **nearSMA21, nearAth, inConsolidationWindow** = comparisons vs thresholds above

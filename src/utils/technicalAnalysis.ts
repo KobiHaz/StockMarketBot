@@ -16,30 +16,34 @@ export function calculateSMA(prices: number[], periods: number): number | undefi
 /** ~21 trading days per month */
 const TRADING_DAYS_PER_MONTH = 21;
 
+/** ~252 trading days per year (52 weeks) */
+const TRADING_DAYS_52W = 252;
+
 /**
- * Calculate Period High (5Y), % from high, and months in consolidation
- * Note: Input is limited to 5 years; "ATH" in variable names = PeriodHigh_5Y
+ * Calculate 52-week high, % from high, and months in consolidation
+ * Uses last 252 trading days (1 year) instead of 5y – more relevant for breakout setups
  */
-export function calculateAthAndConsolidation(closes: number[]): {
+export function calculate52wHighAndConsolidation(closes: number[]): {
     ath: number;
     pctFromAth: number;
     monthsInConsolidation: number;
 } | null {
     if (closes.length < 22) return null; // need ~1 month of data
-    const ath = Math.max(...closes);
-    const lastClose = closes[closes.length - 1];
+    const lookback = closes.slice(-TRADING_DAYS_52W);
+    const ath = Math.max(...lookback);
+    const lastClose = lookback[lookback.length - 1];
     const pctFromAth = ath > 0 ? ((lastClose - ath) / ath) * 100 : 0;
 
-    // Find last index where price was within 2% of ATH (most recent touch)
+    // Find last index (within 52w window) where price was within 2% of 52w high
     let athIndex = -1;
     const athThreshold = ath * 0.98;
-    for (let i = closes.length - 1; i >= 0; i--) {
-        if (closes[i] >= athThreshold) {
+    for (let i = lookback.length - 1; i >= 0; i--) {
+        if (lookback[i] >= athThreshold) {
             athIndex = i;
             break;
         }
     }
-    const tradingDaysSinceAth = athIndex >= 0 ? closes.length - 1 - athIndex : closes.length - 1;
+    const tradingDaysSinceAth = athIndex >= 0 ? lookback.length - 1 - athIndex : lookback.length - 1;
     const monthsInConsolidation = tradingDaysSinceAth / TRADING_DAYS_PER_MONTH;
 
     return { ath, pctFromAth, monthsInConsolidation };

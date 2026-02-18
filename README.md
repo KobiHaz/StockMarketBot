@@ -94,7 +94,7 @@ See [docs/INDICATOR_SOURCES.md](docs/INDICATOR_SOURCES.md) for fetch vs. calcula
 📊 RVOL 4.82x  •  Price +8.42%
 📈 RSI 68  •  Above SMA50
 🎯 Setup 🎯
-   SMA21  1.2% ✓   High  -12% from 5y ✓   Base  14mo ✓
+   SMA21  1.2% ✓   High  -12% from 52w ✓   Base  14mo ✓
 ⛓ TV  YF  BIZ
 📑 News: NVIDIA Reports Record Q4 Revenue...
 
@@ -102,7 +102,7 @@ See [docs/INDICATOR_SOURCES.md](docs/INDICATOR_SOURCES.md) for fetch vs. calcula
 📊 RVOL 3.15x  •  Price -3.21%
 📈 RSI 42  •  Below SMA50
 🎯 Setup 👀
-   SMA21  4.1% ~   High  -18% from 5y ✓   Base  8mo ✓
+   SMA21  4.1% ~   High  -18% from 52w ✓   Base  8mo ✓
 ⛓ TV  YF
 📑 AMD Faces Supply Chain Challenges...
 

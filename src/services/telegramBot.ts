@@ -37,10 +37,10 @@ function formatSetupIndicator(
         lines.push(`<b>SMA21</b> ${detail}`);
     }
 
-    // ATH / High
+    // High (52-week; 5y removed as not relevant)
     if (stock.pctFromAth != null) {
         const absPct = Math.abs(stock.pctFromAth);
-        const highLabel = stock.athSource === '52w' ? '52w' : '5y';
+        const highLabel = '52w';
         const met = absPct <= athThreshold;
         const close = absPct > athThreshold && absPct <= athCloseThreshold;
         let detail = `${stock.pctFromAth.toFixed(0)}% from ${highLabel}`;
@@ -209,21 +209,18 @@ export function formatDailyReport(
             // Header: ticker + main signal
             message += `${statusEmoji} <b><a href="${tvUrl}">${stock.ticker}</a></b>\n`;
 
-            // Section 1: Core metrics (RVOL + Price)
-            message += `├ 📊 <b>RVOL</b> ${stock.rvol.toFixed(2)}x  •  <b>Price</b> ${trendColor} ${sign}${stock.priceChange.toFixed(2)}%\n`;
+            // Section 1: Core metrics – each param on its own row
+            message += `├ 📊 <b>RVOL</b> ${stock.rvol.toFixed(2)}x\n`;
+            message += `├ <b>Price</b> ${trendColor} ${sign}${stock.priceChange.toFixed(2)}%\n`;
 
-            // Section 2: Technicals
-            const techParts: string[] = [];
+            // Section 2: Technicals – each param on its own row
             if (stock.rsi != null) {
                 const rsiContext = stock.rsi > 70 ? ' ⚠️' : stock.rsi < 30 ? ' ✅' : '';
-                techParts.push(`RSI ${stock.rsi.toFixed(0)}${rsiContext}`);
+                message += `├ 📈 <b>RSI</b> ${stock.rsi.toFixed(0)}${rsiContext}\n`;
             }
             if (stock.sma50 != null) {
                 const trend = stock.lastPrice > stock.sma50 ? 'Above SMA50' : 'Below SMA50';
-                techParts.push(trend);
-            }
-            if (techParts.length > 0) {
-                message += `├ 📈 ${techParts.join('  •  ')}\n`;
+                message += `├ ${trend}\n`;
             }
 
             // Section 3: Setup (consolidation) – detailed per-indicator status
@@ -301,7 +298,7 @@ export function formatLegend(): string {
 • <b>RVOL</b> = today's volume ÷ 63-day avg volume
 • <b>Price Change %</b> = (close − prev close) ÷ prev close × 100
 • <b>SMA50, SMA200</b> = SMA of last 50/200 closes
-• <b>5y ATH</b> = max of 5-year history (Yahoo)
+• <b>52w high</b> = max of last 252 trading days (Yahoo / Twelve Data)
 • <b>pctFromAth</b> = (price − ATH) ÷ ATH × 100
 • <b>monthsInConsolidation</b> = days since ATH touch ÷ 21
 

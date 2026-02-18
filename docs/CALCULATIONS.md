@@ -97,45 +97,46 @@ RSI(prices, 14):
 
 ---
 
-## 5. PeriodHigh_5Y (Period High, 5-Year)
+## 5. PeriodHigh_52w (52-Week High)
 
 ```
-PeriodHigh_5Y = max(closes)
+lookback = closes.slice(-252)
+PeriodHigh_52w = max(lookback)
 ```
 
 **Notes:**
-- **Not true All-Time High** – input is limited to 5 years
-- For stocks with higher peaks >5 years ago, this understates the high
-- Variable name in code: `ath` (legacy); meaning: PeriodHigh_5Y
-- Twelve Data fallback: uses 52-week high from quote instead
+- **252 trading days** ≈ 1 year (52 weeks)
+- Yahoo fetches 5y of data; we use only last 252 days for the high
+- Twelve Data fallback: uses 52-week high from quote endpoint
+- Variable name in code: `ath` (legacy)
 
 ---
 
-## 6. pctFromAth (Distance from Period High, %)
+## 6. pctFromAth (Distance from 52w High, %)
 
 ```
-pctFromAth = ((lastClose - PeriodHigh_5Y) / PeriodHigh_5Y) * 100
+pctFromAth = ((lastClose - PeriodHigh_52w) / PeriodHigh_52w) * 100
 ```
 
 **Notes:**
 - `lastClose` = most recent close
-- Negative when below the period high
+- Negative when below the 52-week high
 
 ---
 
 ## 7. monthsInConsolidation
 
 ```
-periodHighThreshold = PeriodHigh_5Y * 0.98
-periodHighIndex = last index i (from end) where closes[i] >= periodHighThreshold
-tradingDaysSinceHigh = (closes.length - 1) - periodHighIndex
+periodHighThreshold = PeriodHigh_52w * 0.98
+periodHighIndex = last index i (within lookback) where lookback[i] >= periodHighThreshold
+tradingDaysSinceHigh = lookback.length - 1 - periodHighIndex
 monthsInConsolidation = tradingDaysSinceHigh / 21
 ```
 
 **Notes:**
 - `21` = trading days per month
-- `periodHighIndex` = most recent bar within 2% of PeriodHigh_5Y
-- If no such bar exists, `periodHighIndex = -1` → `tradingDaysSinceHigh = closes.length - 1`
+- `periodHighIndex` = most recent bar within 2% of 52w high (within lookback)
+- If no such bar exists, `periodHighIndex = -1` → `tradingDaysSinceHigh = lookback.length - 1`
 
 ---
 
