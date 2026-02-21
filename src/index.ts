@@ -91,14 +91,19 @@ async function main(): Promise<void> {
             logger.info('Continuing with available configuration...');
         }
 
-        // 3. Fetch watchlist from Google Sheet and load symbols
+        // 3. Log LLM summary config (helps debug when summary doesn't appear)
+        const llmProvider = config.llmProvider;
+        const llmKey = llmProvider === 'gemini' ? config.geminiApiKey : llmProvider === 'perplexity' ? config.perplexityApiKey : config.openaiApiKey;
+        logger.info(`LLM Summary: ${config.enableLlmSummary ? 'enabled' : 'DISABLED'} | provider=${llmProvider} | key=${llmKey ? '✓ set' : '✗ missing'}`);
+
+        // 4. Fetch watchlist from Google Sheet and load symbols
         await fetchAndCacheWatchlist();
         const tickers = loadWatchlist();
         logger.info(`📋 Loaded ${tickers.length} tickers to scan`);
 
-        // 4. Fetch market data
+        // 5. Fetch market data
         logger.info('📊 Fetching market data...');
-        const stocks = await fetchAllStocks(tickers);
+        const { stocks, failedTickers } = await fetchAllStocks(tickers);
         logger.info(`✅ Fetched data for ${stocks.length}/${tickers.length} stocks`);
 
         if (stocks.length === 0) {
@@ -106,7 +111,7 @@ async function main(): Promise<void> {
             return;
         }
 
-        // 5. Calculate RVOL and filter
+        // 6. Calculate RVOL and filter
         logger.info('🔢 Calculating RVOL...');
         const { topSignals, volumeWithoutPrice } = calculateRVOL(stocks, {
             minRVOL: config.minRVOL,
@@ -115,7 +120,7 @@ async function main(): Promise<void> {
         });
         logger.info(`🎯 Found ${topSignals.length} signals (RVOL ≥ ${config.minRVOL})`);
 
-        // 6. Enrich with news
+        // 7. Enrich with news
         logger.info('📰 Enriching with news...');
         const enrichedSignals = await enrichWithNews(topSignals);
 
@@ -128,11 +133,11 @@ async function main(): Promise<void> {
             };
         });
 
-        // 7. Send report
+        // 8. Send report
         const today = new Date().toISOString().split('T')[0];
-        await sendDailyReport(today, finalSignals, volumeWithoutPrice);
+        await sendDailyReport(today, finalSignals, volumeWithoutPrice, failedTickers);
 
-        // 8. Log completion
+        // 9. Log completion
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);
         logger.info(`\n✅ Report sent successfully in ${duration}s`);
         logger.info(`   Scanned: ${stocks.length} | Signals: ${topSignals.length} | Silent: ${volumeWithoutPrice.length}`);

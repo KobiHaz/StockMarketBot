@@ -80,6 +80,11 @@ The watchlist is loaded from a **Google Sheet** at each run. You manage symbols 
 | `ATH_CLOSE_THRESHOLD_PCT` | 25 | 20–25% = close ~ |
 | `SMA21_TOUCH_THRESHOLD_PCT` | 3 | Within 3% of SMA21 = full ✓ |
 | `SMA21_CLOSE_THRESHOLD_PCT` | 5 | 3–5% = close ~ |
+| `ENABLE_LLM_SUMMARY` | false | Set to `true` to send an AI-generated summary as the first Telegram message |
+| `LLM_PROVIDER` | openai | LLM for summary: `openai`, `perplexity`, or `gemini` |
+| `OPENAI_API_KEY` | — | **Optional.** For LLM summary when `LLM_PROVIDER=openai`; [platform.openai.com](https://platform.openai.com/api-keys) |
+| `PERPLEXITY_API_KEY` | — | **Optional.** For LLM summary when `LLM_PROVIDER=perplexity`; [perplexity.ai](https://www.perplexity.ai/settings/api) |
+| `GEMINI_API_KEY` | — | **Optional.** For LLM summary when `LLM_PROVIDER=gemini`; [Google AI Studio](https://aistudio.google.com/apikey) |
 
 See [docs/INDICATOR_SOURCES.md](docs/INDICATOR_SOURCES.md) for fetch vs. calculate for technical indicators, and [docs/MESSAGE_GUIDE.md](docs/MESSAGE_GUIDE.md) for how signals and setup indicators are shown in the report.
 

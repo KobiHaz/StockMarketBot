@@ -100,5 +100,27 @@ describe('Telegram Formatter', () => {
             expect(report).toContain('AMD');
             expect(report).toContain('🔴 -3.33%');
         });
+
+        it('should include failed tickers section when provided', () => {
+            const report = formatDailyReport('2026-02-01', mockSignals, [], ['BAD.TA', 'MISSING']);
+
+            expect(report).toContain('Could not check (fetch error)');
+            expect(report).toContain('BAD.TA');
+            expect(report).toContain('MISSING');
+        });
+
+        it('should include failed tickers in empty-signals report', () => {
+            const report = formatDailyReport('2026-02-01', [], [], ['ERR1']);
+
+            expect(report).toContain('No high-volume signals detected today');
+            expect(report).toContain('Could not check (fetch error)');
+            expect(report).toContain('ERR1');
+        });
+
+        it('should not add failed section when failedTickers is empty', () => {
+            const report = formatDailyReport('2026-02-01', mockSignals, []);
+
+            expect(report).not.toContain('Could not check');
+        });
     });
 });

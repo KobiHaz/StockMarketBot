@@ -240,15 +240,21 @@ async function fetchFromTwelveData(ticker: string): Promise<StockData | null> {
 
 import pLimit from 'p-limit';
 
+export interface FetchAllStocksResult {
+    stocks: StockData[];
+    failedTickers: string[];
+}
+
 /**
  * Fetch all stocks with multiple fallback strategies
  */
-export async function fetchAllStocks(tickers: string[]): Promise<StockData[]> {
+export async function fetchAllStocks(tickers: string[]): Promise<FetchAllStocksResult> {
     logger.info(`🚀 Starting fetch for ${tickers.length} tickers using concurrency...`);
 
     // Limit concurrency to avoid aggressive rate limiting from Yahoo/Twelve Data
     const limit = pLimit(3);
     const results: StockData[] = [];
+    const failedTickers: string[] = [];
 
     const tasks = tickers.map((ticker, index) => limit(async () => {
         logger.info(`[${index + 1}/${tickers.length}] Fetching ${ticker}...`);
@@ -265,20 +271,26 @@ export async function fetchAllStocks(tickers: string[]): Promise<StockData[]> {
 
         if (result) {
             logger.info(`✅ ${ticker}: RVOL=${result.rvol.toFixed(2)}x (${successSource})`);
-            return result;
+            return { ticker, data: result };
         } else {
             logger.warn(`❌ ${ticker}: No data from any source`);
-            return null;
+            return { ticker, data: null };
         }
     }));
 
     const fetchResults = await Promise.all(tasks);
 
-    // Filter out nulls and add to final results
-    fetchResults.forEach(res => {
-        if (res) results.push(res);
+    fetchResults.forEach((res) => {
+        if (res.data) {
+            results.push(res.data);
+        } else {
+            failedTickers.push(res.ticker);
+        }
     });
 
     logger.info(`📊 Final: ${results.length}/${tickers.length} stocks fetched successfully`);
-    return results;
+    if (failedTickers.length > 0) {
+        logger.warn(`⚠️ Failed to fetch: ${failedTickers.join(', ')}`);
+    }
+    return { stocks: results, failedTickers };
 }

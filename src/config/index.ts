@@ -31,6 +31,13 @@ export const config = {
 
     // API Keys
     finnhubApiKey: process.env.FINNHUB_API_KEY || '',
+    openaiApiKey: process.env.OPENAI_API_KEY || '',
+    perplexityApiKey: process.env.PERPLEXITY_API_KEY || '',
+    geminiApiKey: process.env.GEMINI_API_KEY || '',
+
+    // LLM summary: on when API key exists for chosen provider (set ENABLE_LLM_SUMMARY=false to disable)
+    llmProvider: (process.env.LLM_PROVIDER || 'openai').toLowerCase() as 'openai' | 'perplexity' | 'gemini',
+    enableLlmSummary: process.env.ENABLE_LLM_SUMMARY !== 'false',
 
     // Telegram
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
