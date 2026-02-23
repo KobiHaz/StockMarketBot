@@ -11,6 +11,7 @@ import { XMLParser } from 'fast-xml-parser';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import pLimit from 'p-limit';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const xmlParser = new XMLParser();
@@ -108,8 +109,6 @@ export async function fetchHebrewNews(ticker: string): Promise<NewsItem[]> {
         return [];
     }
 }
-
-import pLimit from 'p-limit';
 
 /**
  * Enrich stocks with news data

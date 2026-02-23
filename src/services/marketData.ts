@@ -6,6 +6,7 @@
 import { StockData } from '../types/index.js';
 import { config } from '../config/index.js';
 import logger from '../utils/logger.js';
+import pLimit from 'p-limit';
 import { calculateSMA, calculateRSI, calculate52wHighAndConsolidation, isNearSMA } from '../utils/technicalAnalysis.js';
 
 /**
@@ -237,8 +238,6 @@ async function fetchFromTwelveData(ticker: string): Promise<StockData | null> {
         return null;
     }
 }
-
-import pLimit from 'p-limit';
 
 export interface FetchAllStocksResult {
     stocks: StockData[];
