@@ -26,7 +26,7 @@ Modernizing the **Smart Volume Radar** by optimizing data fetching performance, 
   - [x] 🟩 Improve `checkMarketStatus` in `src/index.ts` to better handle timezones and edge cases (readying for holiday awareness).
   - [x] 🟩 Merge `watchlist.json` and `sectors.json` into a more manageable `tickers.json` with metadata tags to reduce maintenance overhead.
 
-- [x] � **Step 4: Verification & Testing**
-  - [x] � Run a full test scan using `FORCE_SCAN=true`.
-  - [x] � Verify that Telegram reports are correctly grouped by the updated sector configuration.
-  - [x] � Measure execution time to confirm performance improvement from concurrency.
+- [x] 🟩 **Step 4: Verification & Testing**
+  - [x] 🟩 Run a full test scan using `FORCE_SCAN=true`.
+  - [x] 🟩 Verify that Telegram reports are correctly grouped by the updated sector configuration.
+  - [x] 🟩 Measure execution time to confirm performance improvement from concurrency.
