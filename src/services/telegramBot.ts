@@ -430,7 +430,6 @@ export async function sendDailyReport(
 ): Promise<void> {
     const report = formatDailyReport(date, topSignals, volumeWithoutPrice, failedTickers);
     const chunks = chunkMessage(report);
-    const dataHeader = formatMessageDataHeader(date, topSignals.length, volumeWithoutPrice.length);
 
     // Optional: send LLM summary as first message (keeps report chunks under length limit)
     if (topSignals.length > 0) {

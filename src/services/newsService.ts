@@ -123,7 +123,7 @@ export async function enrichWithNews<T extends { ticker: string }>(
     const limit = pLimit(2);
     const { newsDelayMs } = config;
 
-    const tasks = stocks.map((stock, i) => limit(async () => {
+    const tasks = stocks.map((stock) => limit(async () => {
         let news: NewsItem[] = [];
 
         try {
