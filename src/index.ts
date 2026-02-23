@@ -68,7 +68,7 @@ function checkMarketStatus(): MarketStatus {
  * Main execution function
  */
 async function main(): Promise<void> {
-    console.log('\n🚀 Smart Volume Radar starting...\n');
+    logger.info('🚀 Smart Volume Radar starting...');
     const startTime = Date.now();
 
     try {
@@ -135,7 +135,9 @@ async function main(): Promise<void> {
 
         // 8. Send report
         const today = new Date().toISOString().split('T')[0];
-        await sendDailyReport(today, finalSignals, volumeWithoutPrice, failedTickers);
+        await sendDailyReport(today, finalSignals, volumeWithoutPrice, failedTickers, {
+            watchlistCount: tickers.length,
+        });
 
         // 9. Log completion
         const duration = ((Date.now() - startTime) / 1000).toFixed(1);

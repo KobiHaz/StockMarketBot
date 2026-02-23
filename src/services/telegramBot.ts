@@ -6,7 +6,7 @@
 import { RVOLResult, StockData } from '../types/index.js';
 import { config } from '../config/index.js';
 import logger from '../utils/logger.js';
-import { getReportSummary } from './llmSummary.js';
+import { getReportSummary, getPerStockAnalyses } from './llmSummary.js';
 
 const TELEGRAM_MAX_LENGTH = 4096;
 
@@ -84,9 +84,7 @@ export async function sendTelegramMessage(message: string): Promise<void> {
 
     if (!telegramBotToken || !telegramChatId) {
         logger.warn('Telegram credentials not configured, skipping send');
-        console.log('\n--- TELEGRAM MESSAGE PREVIEW ---\n');
-        console.log(message.replace(/<[^>]*>/g, '')); // Strip HTML for console
-        console.log('\n--- END PREVIEW ---\n');
+        logger.info('--- TELEGRAM MESSAGE PREVIEW ---\n' + message.replace(/<[^>]*>/g, '') + '\n--- END PREVIEW ---');
         return;
     }
 
@@ -320,14 +318,50 @@ const STOCK_ROW_FORMAT = 'TICKER | RVOL X.XXx | Price ±X.XX% | RSI XX | Setup';
 /**
  * Format one stock row in the shared structure (used by both code and LLM).
  */
-function formatStockRow(stock: StockData, setupEmoji: '🎯' | '👀'): string {
+function formatStockRow(stock: StockData, setupEmoji: '🎯' | '👀' | '—'): string {
     const sign = stock.priceChange >= 0 ? '+' : '';
     const rsi = stock.rsi != null ? stock.rsi.toFixed(0) : '—';
     return `${stock.ticker} | RVOL ${stock.rvol.toFixed(2)}x | Price ${sign}${stock.priceChange.toFixed(2)}% | RSI ${rsi} | ${setupEmoji}`;
 }
 
 /**
- * Get setup stock rows from code (for LLM prompt – same tickers, same format).
+ * Get the StockData[] list for LLM (same stocks as getAllSignalRows).
+ * Used so LLM receives the exact params the code calculated.
+ */
+export function getStocksForLlm(topSignals: RVOLResult[], volumeWithoutPrice: StockData[]): StockData[] {
+    const isFullSetup = (s: StockData) => !!(s.nearSMA21 && s.nearAth && s.inConsolidationWindow);
+    const isCloseSetup = (s: StockData) =>
+        (s.nearSMA21 || s.nearSMA21Close) &&
+        (s.nearAth || s.nearAthClose) &&
+        (s.inConsolidationWindow || s.inConsolidationClose);
+    const hasSetup = (s: StockData) => isFullSetup(s) || isCloseSetup(s);
+    const setupFromSilent = volumeWithoutPrice.filter(hasSetup);
+    const topSilent = [...volumeWithoutPrice].sort((a, b) => b.rvol - a.rvol).slice(0, 10);
+    return [...topSignals, ...setupFromSilent, ...topSilent]
+        .filter((s, i, arr) => arr.findIndex((x) => x.ticker === s.ticker) === i)
+        .sort((a, b) => b.rvol - a.rvol);
+}
+
+/**
+ * Get ALL high-RVOL signal rows for LLM (every stock we report on).
+ * Includes 🎯 full setup, 👀 close setup, — no setup. LLM sees complete picture.
+ * Ensures ALL setup stocks (🎯/👀) are included + topSignals + top 10 silent.
+ */
+export function getAllSignalRows(topSignals: RVOLResult[], volumeWithoutPrice: StockData[]): string[] {
+    const isFullSetup = (s: StockData) => !!(s.nearSMA21 && s.nearAth && s.inConsolidationWindow);
+    const isCloseSetup = (s: StockData) =>
+        (s.nearSMA21 || s.nearSMA21Close) &&
+        (s.nearAth || s.nearAthClose) &&
+        (s.inConsolidationWindow || s.inConsolidationClose);
+    const stocks = getStocksForLlm(topSignals, volumeWithoutPrice);
+    return stocks.map((s) => {
+        const emoji: '🎯' | '👀' | '—' = isFullSetup(s) ? '🎯' : isCloseSetup(s) ? '👀' : '—';
+        return formatStockRow(s, emoji);
+    });
+}
+
+/**
+ * Get setup stock rows from code (setup stocks only – for compact Data display).
  */
 export function getSetupRowsFromData(topSignals: RVOLResult[], volumeWithoutPrice: StockData[]): string[] {
     const isFullSetup = (s: StockData) => !!(s.nearSMA21 && s.nearAth && s.inConsolidationWindow);
@@ -377,6 +411,11 @@ function formatMessageDataHeader(
     return `📊 <code>${parts.join(' • ')}</code>\n\n`;
 }
 
+/** Scope info for LLM verification (watchlist size, etc.) */
+export interface ReportScope {
+    watchlistCount?: number;
+}
+
 /**
  * Send the daily report, splitting if necessary.
  * If LLM summary is enabled and succeeds, it is prepended to the first message.
@@ -386,7 +425,8 @@ export async function sendDailyReport(
     date: string,
     topSignals: RVOLResult[],
     volumeWithoutPrice: StockData[],
-    failedTickers: string[] = []
+    failedTickers: string[] = [],
+    scope?: ReportScope
 ): Promise<void> {
     const report = formatDailyReport(date, topSignals, volumeWithoutPrice, failedTickers);
     const chunks = chunkMessage(report);
@@ -394,20 +434,56 @@ export async function sendDailyReport(
 
     // Optional: send LLM summary as first message (keeps report chunks under length limit)
     if (topSignals.length > 0) {
-        const summary = await getReportSummary(report, date);
+        const llmMinRvol = config.llmMinRvol;
+        const forLlm =
+            llmMinRvol > 0
+                ? {
+                      topSignals: topSignals.filter((s) => s.rvol > llmMinRvol),
+                      volumeWithoutPrice: volumeWithoutPrice.filter((s) => s.rvol > llmMinRvol),
+                  }
+                : { topSignals, volumeWithoutPrice };
+        const allSignalRows = getAllSignalRows(forLlm.topSignals, forLlm.volumeWithoutPrice);
+        const setupRows = getSetupRowsFromData(topSignals, volumeWithoutPrice);
+        let summary: string | null = null;
+        if (allSignalRows.length > 0) {
+            if (config.llmPerStock) {
+                const stocksForLlm = getStocksForLlm(forLlm.topSignals, forLlm.volumeWithoutPrice);
+                const analyses = await getPerStockAnalyses(stocksForLlm, date);
+                const lines = analyses
+                    .filter((a) => a.analysis)
+                    .map((a) => `• <b>${a.ticker}</b> <code>קוד ${a.codeSetup}</code> | ${a.analysis}`);
+                summary = lines.length > 0 ? lines.join('\n') : null;
+            } else {
+                const stocksForLlm = getStocksForLlm(forLlm.topSignals, forLlm.volumeWithoutPrice);
+                summary = await getReportSummary(stocksForLlm, date, {
+                    watchlistCount: scope?.watchlistCount,
+                    setupCount: setupRows.length,
+                });
+            }
+        }
         if (summary) {
             const llmDataHeader = formatMessageDataHeader(date, topSignals.length, volumeWithoutPrice.length, 'LLM Summary');
             const setupRef = formatSetupReference(topSignals, volumeWithoutPrice);
+            const tickersSent = allSignalRows.map((r) => r.split('|')[0].trim()).join(', ');
+            const rvolNote =
+                llmMinRvol > 0 ? ` (RVOL>${llmMinRvol})` : '';
+            const scopeLine =
+                scope?.watchlistCount != null
+                    ? `\n<i>✅ נסרקו ${scope.watchlistCount} מניות מ-Sheets | ל-LLM נשלחו ${allSignalRows.length}${rvolNote}: ${tickersSent}</i>\n\n`
+                    : `\n<i>✅ ל-LLM נשלחו ${allSignalRows.length}${rvolNote} מניות: ${tickersSent}</i>\n\n`;
+            const modeLabel = config.llmPerStock ? ' (כל מניה: LLM מחשב בעצמו, אותו תנאים)' : '';
             const explanation =
-                '<i>📋 Data = חישוב המערכת (RVOL, מחיר, RSI) | 🤖 LLM = פרשנות אנליסטית על הדוח</i>\n\n';
-            const llmMessage = `${llmDataHeader}${explanation}${setupRef}🤖 <b>ניתוח LLM:</b>\n\n${summary}\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+                '<i>📋 קוד = חישוב הקוד | 🤖 LLM = מחשב פרמטרים בעצמו (SMA21, High, Base) | Match = התאמה לאימות</i>\n\n';
+            const llmMessage = `${llmDataHeader}${explanation}${scopeLine}${setupRef}🤖 <b>ניתוח LLM${modeLabel}:</b>\n\n${summary}\n\n━━━━━━━━━━━━━━━━━━━━━━\n\n`;
             await sendTelegramMessage(llmMessage);
             logger.info('LLM summary sent as first Telegram message');
             if (process.env.DEBUG === 'true') {
-                console.log('\n--- LLM MESSAGE PREVIEW ---\n');
-                console.log(llmMessage.replace(/<[^>]*>/g, ''));
-                console.log('\n--- END LLM PREVIEW ---\n');
+                logger.info('--- LLM MESSAGE PREVIEW ---\n' + llmMessage.replace(/<[^>]*>/g, '') + '\n--- END LLM PREVIEW ---');
             }
+        } else if (allSignalRows.length === 0) {
+            logger.info(
+                `LLM summary skipped: no stocks with RVOL > ${llmMinRvol}. Set LLM_MIN_RVOL=0 to include all signals.`
+            );
         } else {
             logger.warn('LLM summary not sent. Check: ENABLE_LLM_SUMMARY=true, correct LLM_PROVIDER, and API key set for that provider.');
         }
