@@ -12,10 +12,6 @@ Perform comprehensive code review. Be thorough but concise.
 - **Error Handling** - Try-catch for async, centralized handlers, helpful messages.
 - **TypeScript** - No `any` types, proper interfaces, no `@ts-ignore`.
 - **Production Readiness** - No debug statements, no TODOs, no hardcoded secrets.
-- **React/Hooks** - Effects have cleanup, dependencies complete, no infinite loops.
-- **Performance** - No unnecessary re-renders, expensive calcs memoized.
-- **Security** - Auth checked, inputs validated, RLS policies in place.
-- **Accessibility** - Elements meet ARIA standards and WCAG 2.1 compliance.
 - **Architecture** - Follows existing patterns, code in correct directory.
 
 ## Output Format
