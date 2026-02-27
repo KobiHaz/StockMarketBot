@@ -2,12 +2,18 @@
  * Telegram Formatter Tests
  */
 
-// Mock config before importing telegramBot
+// Mock config and llmSummary before importing telegramBot (avoids p-limit ESM in Jest)
 jest.mock('../src/config/index.js', () => ({
     config: {
         telegramBotToken: 'mock-token',
         telegramChatId: 'mock-chat-id',
+        llmPerStock: false,
+        llmMinRvol: 0,
     },
+}));
+jest.mock('../src/services/llmSummary.js', () => ({
+    getReportSummary: jest.fn(),
+    getPerStockAnalyses: jest.fn(),
 }));
 
 import { formatDailyReport } from '../src/services/telegramBot';

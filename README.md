@@ -80,13 +80,15 @@ The watchlist is loaded from a **Google Sheet** at each run. You manage symbols 
 | `ATH_CLOSE_THRESHOLD_PCT` | 25 | 20–25% = close ~ |
 | `SMA21_TOUCH_THRESHOLD_PCT` | 3 | Within 3% of SMA21 = full ✓ |
 | `SMA21_CLOSE_THRESHOLD_PCT` | 5 | 3–5% = close ~ |
-| `ENABLE_LLM_SUMMARY` | false | Set to `true` to send an AI-generated summary as the first Telegram message |
+| `ENABLE_LLM_SUMMARY` | true | Set to `false` to disable AI-generated summary as first Telegram message |
 | `LLM_PROVIDER` | openai | LLM for summary: `openai`, `perplexity`, or `gemini` |
+| `LLM_MIN_RVOL` | 2 | Min RVOL for LLM analysis; only stocks with RVOL > this get sent. Set 0 to include all signals. |
+| `LLM_PER_STOCK` | true | If true, send each signal to LLM separately (parallel). If false, use single batch summary. |
 | `OPENAI_API_KEY` | — | **Optional.** For LLM summary when `LLM_PROVIDER=openai`; [platform.openai.com](https://platform.openai.com/api-keys) |
 | `PERPLEXITY_API_KEY` | — | **Optional.** For LLM summary when `LLM_PROVIDER=perplexity`; [perplexity.ai](https://www.perplexity.ai/settings/api) |
 | `GEMINI_API_KEY` | — | **Optional.** For LLM summary when `LLM_PROVIDER=gemini`; [Google AI Studio](https://aistudio.google.com/apikey) |
 
-See [docs/INDICATOR_SOURCES.md](docs/INDICATOR_SOURCES.md) for fetch vs. calculate for technical indicators, and [docs/MESSAGE_GUIDE.md](docs/MESSAGE_GUIDE.md) for how signals and setup indicators are shown in the report.
+**Documentation:** In Obsidian vault `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Maestro` → `04-knowledge/reference/`, `02-projects/smart-volume-radar/README.md`.
 
 ## Sample Output
 
@@ -118,9 +120,17 @@ MSFT (2.1x), ORCL (2.3x)
 
 ## Documentation
 
-- **[MESSAGE_GUIDE.md](docs/MESSAGE_GUIDE.md)** – What each field and emoji means in the Telegram report
-- **[CALCULATIONS.md](docs/CALCULATIONS.md)** – Exact formulas for RVOL, RSI, SMA, and setup metrics
-- **[INDICATOR_SOURCES.md](docs/INDICATOR_SOURCES.md)** – Using Twelve Data vs. local calculation for indicators
+**מקור אמת:** הכספת (Obsidian vault). אין כפילות — כל התיעוד בכספת.
+
+**נתיב הכספת:** `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Maestro`
+
+- **Reference:** `04-knowledge/reference/` — architecture, calculations, message guide, indicator sources
+- **Standards:** `04-knowledge/standards/smart-volume-radar-standards.md`
+- **Plans:** `docs/plans/` — remaining tasks (e.g. `2026-02-27-smart-volume-radar-remaining-tasks.md`)
+
+**הנחיה:** אחרי סיום משימה — עדכן תיעוד בכספת, מחק plan ישן.
+
+אינדקס: `02-projects/smart-volume-radar/README.md`
 
 ## Project Structure
 
@@ -136,7 +146,6 @@ smart-volume-radar/
 │   │   └── telegramBot.ts # Telegram messaging
 │   ├── types/             # TypeScript interfaces
 │   └── utils/             # Helpers, technical analysis, error handling
-├── docs/                  # Message guide, calculations, indicator sources
 ├── scripts/               # Utilities (e.g. send-legend to Telegram)
 ├── tests/                 # Unit tests
 └── .github/workflows/     # GitHub Actions

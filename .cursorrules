@@ -1,0 +1,28 @@
+# Smart Volume Radar — Cursor Rules
+
+## Single Source of Truth: Vault Only
+
+**No duplication.** All permanent content lives in the vault; the project stays minimal.
+
+**Vault:** `~/Library/Mobile Documents/iCloud~md~obsidian/Documents/Maestro`
+
+- Reference: `04-knowledge/reference/smart-volume-radar-*.md` (architecture, calculations, message-guide, indicator-sources)
+- Standards: `04-knowledge/standards/smart-volume-radar-standards.md`
+- Plans: `docs/plans/`
+
+## Quick Reference
+
+| Entity | Rule |
+|--------|------|
+| Config | Central `config` from env; `fetchAndCacheWatchlist()` before scan |
+| Logging | `logger` only; never `console.log` |
+| Imports | Top of file only; no inline imports |
+| Concurrency | `p-limit` (3–5 tickers, 2 news) |
+
+## Plan Lifecycle (MANDATORY)
+
+1. **When completing a task** — Update the relevant documentation (docs/, 04-knowledge/reference)
+2. **Suggest deleting** the old work plan if all tasks are done
+3. **Before deleting** — Move any important decision/lesson to Reference in the vault
+
+**Standing rule:** Whenever you finish a task, update the relevant documentation and suggest deleting the old work plan.

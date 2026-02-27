@@ -38,6 +38,10 @@ export const config = {
     // LLM summary: on when API key exists for chosen provider (set ENABLE_LLM_SUMMARY=false to disable)
     llmProvider: (process.env.LLM_PROVIDER || 'openai').toLowerCase() as 'openai' | 'perplexity' | 'gemini',
     enableLlmSummary: process.env.ENABLE_LLM_SUMMARY !== 'false',
+    /** Min RVOL for LLM analysis – only stocks with RVOL > this get sent (default 2). Set 0 to include all signals. */
+    llmMinRvol: parseFloat(process.env.LLM_MIN_RVOL || '2'),
+    /** Per-stock LLM: send each signal to LLM separately (parallel). If false, use single batch summary. */
+    llmPerStock: process.env.LLM_PER_STOCK !== 'false',
 
     // Telegram
     telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',

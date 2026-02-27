@@ -10,6 +10,7 @@ module.exports = {
     moduleNameMapper: {
         '^(\\.{1,2}/.*)\\.js$': '$1',
     },
+    transformIgnorePatterns: ['/node_modules/(?!p-limit|yocto-queue)/'],
     transform: {
         '^.+\\.ts$': ['ts-jest', {
             useESM: true,
