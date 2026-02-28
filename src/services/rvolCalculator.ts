@@ -5,6 +5,7 @@
 
 import { StockData, RVOLConfig } from '../types/index.js';
 import logger from '../utils/logger.js';
+import { isFullSetup, isCloseSetup } from '../utils/setup.js';
 
 /**
  * RVOL calculation results
@@ -12,19 +13,6 @@ import logger from '../utils/logger.js';
 export interface RVOLCalcResult {
     topSignals: StockData[];
     volumeWithoutPrice: StockData[];
-}
-
-/** Full setup: near SMA21, near ATH, in 6mo-3y window */
-function isFullConsolidationSetup(s: StockData): boolean {
-    return !!(s.nearSMA21 && s.nearAth && s.inConsolidationWindow);
-}
-
-/** Close setup: flexible - e.g. 4mo base, 17% from ATH - worth watching */
-function isCloseConsolidationSetup(s: StockData): boolean {
-    const smaOk = s.nearSMA21 || s.nearSMA21Close;
-    const athOk = s.nearAth || s.nearAthClose;
-    const baseOk = s.inConsolidationWindow || s.inConsolidationClose;
-    return !!(smaOk && athOk && baseOk);
 }
 
 /**
@@ -46,13 +34,13 @@ export function calculateRVOL(stocks: StockData[], rvolConfig: RVOLConfig): RVOL
     highRVOL.sort((a, b) => {
         const rvolDiff = b.rvol - a.rvol;
         if (Math.abs(rvolDiff) >= 0.5) return rvolDiff > 0 ? 1 : -1; // RVOL dominates
-        const boostA = isFullConsolidationSetup(a) ? 2 : isCloseConsolidationSetup(a) ? 1 : 0;
-        const boostB = isFullConsolidationSetup(b) ? 2 : isCloseConsolidationSetup(b) ? 1 : 0;
+        const boostA = isFullSetup(a) ? 2 : isCloseSetup(a) ? 1 : 0;
+        const boostB = isFullSetup(b) ? 2 : isCloseSetup(b) ? 1 : 0;
         return boostB - boostA || rvolDiff;
     });
 
-    const fullCount = highRVOL.filter(isFullConsolidationSetup).length;
-    const closeCount = highRVOL.filter(isCloseConsolidationSetup).length;
+    const fullCount = highRVOL.filter(isFullSetup).length;
+    const closeCount = highRVOL.filter(isCloseSetup).length;
     if (fullCount > 0 || closeCount > 0) {
         logger.info(`Identified ${fullCount} full + ${closeCount} close consolidation setup(s)`);
     }
@@ -75,24 +63,4 @@ export function calculateRVOL(stocks: StockData[], rvolConfig: RVOLConfig): RVOL
     return { topSignals, volumeWithoutPrice };
 }
 
-/**
- * Format RVOL for display (e.g., "3.25x")
- */
-export function formatRVOL(rvol: number): string {
-    return `${rvol.toFixed(2)}x`;
-}
-
-/**
- * Format price change for display (e.g., "+5.42%" or "-2.31%")
- */
-export function formatPriceChange(change: number): string {
-    const sign = change >= 0 ? '+' : '';
-    return `${sign}${change.toFixed(2)}%`;
-}
-
-/**
- * Determine if stock is bullish or bearish based on price change
- */
-export function isBullish(stock: StockData): boolean {
-    return stock.priceChange >= 0;
-}
+export { formatRVOL, formatPriceChange, isBullish } from '../utils/formatters.js';
